@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>rPPG · Cardiac Monitor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:       #04060d;
+      --panel:    #080c18;
+      --border:   #0f1e38;
+      --green:    #00f5a0;
+      --green-dim:#00a86b;
+      --blue:     #0af;
+      --red:      #ff3b6b;
+      --amber:    #ffb347;
+      --text:     #8da3c0;
+      --text-hi:  #cde0f5;
+      --glow:     0 0 18px #00f5a080, 0 0 40px #00f5a030;
+      --glow-red: 0 0 18px #ff3b6b80, 0 0 40px #ff3b6b30;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Rajdhani', sans-serif;
+      height: 100vh;
+      display: grid;
+      grid-template-rows: 56px 1fr;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(90deg, #050810 0%, #08111f 100%);
+    }
+    .logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.4rem;
+      letter-spacing: 4px;
+      color: var(--green);
+      text-shadow: var(--glow);
+    }
+    .logo span { color: var(--text); text-shadow: none; }
+    .header-meta {
+      display: flex;
+      gap: 32px;
+      align-items: center;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.75rem;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: var(--glow);
+      animation: pulse-dot 2s ease-in-out infinite;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    #clock { color: var(--blue); }
+
+    /* ── Main Grid ── */
+    main {
+      display: grid;
+      grid-template-columns: 3fr 2fr;
+      grid-template-rows: 35% 45% 20%;
+      gap: 1px;
+      background: var(--border);
+      overflow: hidden;
+    }
+
+    /* ── Panels ── */
+    .panel {
+      background: var(--panel);
+      position: relative;
+      overflow: hidden;
+    }
+    .panel-label {
+      position: absolute;
+      top: 12px; left: 16px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 3px;
+      color: var(--green-dim);
+      z-index: 2;
+    }
+
+    /* ── Camera Feed ── */
+    #cam-panel {
+      grid-row: 1 / 4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #cam-wrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    #cam-feed {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      filter: saturate(0.8) contrast(1.05);
+    }
+    /* Scanline overlay */
+    #cam-wrap::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.08) 2px,
+        rgba(0,0,0,0.08) 4px
+      );
+      pointer-events: none;
+    }
+    /* Face box drawn by JS */
+    #face-canvas {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    .no-signal {
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.85rem;
+      letter-spacing: 2px;
+      text-align: center;
+    }
+
+    /* ── HR Display ── */
+    #hr-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 20px;
+    }
+    .hr-ring-wrap {
+      position: relative;
+      width: 220px; height: 220px;
+    }
+    .hr-ring {
+      width: 220px; height: 220px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .hr-ring::before {
+      content: '';
+      position: absolute; inset: -6px;
+      border-radius: 50%;
+      border: 1px solid var(--green);
+      box-shadow: var(--glow);
+      animation: ring-pulse 1s ease-in-out infinite;
+      animation-play-state: paused;
+    }
+    .hr-ring.beating::before { animation-play-state: running; }
+    @keyframes ring-pulse {
+      0%   { transform: scale(1);    opacity: 0.8; }
+      50%  { transform: scale(1.06); opacity: 0.3; }
+      100% { transform: scale(1);    opacity: 0.8; }
+    }
+    .hr-number {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 6rem;
+      color: var(--green);
+      text-shadow: var(--glow);
+      line-height: 1;
+      letter-spacing: 2px;
+    }
+    .hr-unit {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--green-dim);
+      letter-spacing: 3px;
+      text-align: center;
+    }
+    .hr-status {
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--text);
+    }
+    .hr-status.normal { color: var(--green); }
+    .hr-status.low    { color: var(--blue); }
+    .hr-status.high   { color: var(--red); text-shadow: var(--glow-red); }
+
+    /* Heart icon */
+    .heart-icon {
+      position: absolute;
+      bottom: 10px; right: 10px;
+      font-size: 1.2rem;
+      animation: heartbeat 1s ease-in-out infinite;
+      animation-play-state: paused;
+      filter: drop-shadow(0 0 6px var(--red));
+    }
+    .heart-icon.beating { animation-play-state: running; }
+    @keyframes heartbeat {
+      0%   { transform: scale(1); }
+      14%  { transform: scale(1.2); }
+      28%  { transform: scale(1); }
+      42%  { transform: scale(1.1); }
+      70%  { transform: scale(1); }
+      100% { transform: scale(1); }
+    }
+
+    /* ── BVP Oscilloscope ── */
+    #bvp-panel { padding-top: 36px; }
+    #bvp-canvas {
+      width: 100%;
+      height: calc(100% - 36px);
+      display: block;
+    }
+
+    /* ── HR History Chart ── */
+    #history-panel { padding: 28px 14px 10px; }
+    #hr-chart { width: 100% !important; height: calc(100% - 28px) !important; }
+
+    /* ── Corner decorations ── */
+    .corner {
+      position: absolute;
+      width: 12px; height: 12px;
+      border-color: var(--green);
+      border-style: solid;
+      opacity: 0.5;
+    }
+    .corner.tl { top: 8px; left: 8px;  border-width: 1px 0 0 1px; }
+    .corner.tr { top: 8px; right: 8px; border-width: 1px 1px 0 0; }
+    .corner.bl { bottom: 8px; left: 8px;  border-width: 0 0 1px 1px; }
+    .corner.br { bottom: 8px; right: 8px; border-width: 0 1px 1px 0; }
+
+    /* ── Overlay grid lines for oscilloscope ── */
+    .grid-overlay {
+      position: absolute;
+      inset: 36px 0 0 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 30px;
+      pointer-events: none;
+      opacity: 0.5;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">rPPG <span>· CARDIAC MONITOR</span></div>
+  <div class="header-meta">
+    <span><span class="status-dot"></span><span id="status-text">CONNECTING</span></span>
+    <span id="clock">00:00:00</span>
+    <span id="fps-counter">-- FPS</span>
+  </div>
+</header>
+
+<main>
+  <!-- Camera -->
+  <div class="panel" id="cam-panel">
+    <div class="panel-label">OPTICAL · CAMERA FEED</div>
+    <div id="cam-wrap">
+      <img id="cam-feed" alt=""/>
+      <canvas id="face-canvas"></canvas>
+    </div>
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+  </div>
+
+  <!-- HR Display -->
+  <div class="panel" id="hr-panel">
+    <div class="panel-label">HEART RATE</div>
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+    <div class="hr-ring-wrap">
+      <div class="hr-ring" id="hr-ring">
+        <div>
+          <div class="hr-number" id="hr-value">--</div>
+          <div class="hr-unit">BPM</div>
+        </div>
+      </div>
+      <div class="heart-icon" id="heart-icon">♥</div>
+    </div>
+    <div class="hr-status" id="hr-status">ACQUIRING SIGNAL</div>
+  </div>
+
+  <!-- BVP Oscilloscope -->
+  <div class="panel" id="bvp-panel">
+    <div class="panel-label">BVP · BLOOD VOLUME PULSE</div>
+    <div class="grid-overlay"></div>
+    <canvas id="bvp-canvas"></canvas>
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+  </div>
+
+  <!-- HR History -->
+  <div class="panel" id="history-panel">
+    <div class="panel-label">HR TREND · LAST 60s</div>
+    <canvas id="hr-chart"></canvas>
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+  </div>
+</main>
+
+<script>
+// ── Clock ──────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toTimeString().slice(0,8);
+}
+setInterval(updateClock, 1000); updateClock();
+
+// ── Socket ─────────────────────────────────────────────────────
+const socket = io();
+const statusEl = document.getElementById('status-text');
+
+socket.on('connect',    () => { statusEl.textContent = 'LIVE'; });
+socket.on('disconnect', () => { statusEl.textContent = 'OFFLINE'; });
+
+// ── Camera Feed ────────────────────────────────────────────────
+const camFeed    = document.getElementById('cam-feed');
+const faceCanvas = document.getElementById('face-canvas');
+const faceCtx    = faceCanvas.getContext('2d');
+
+let frameCount = 0, lastFpsTime = performance.now();
+const fpsEl = document.getElementById('fps-counter');
+
+socket.on('frame', ({ img, box }) => {
+  camFeed.src = 'data:image/jpeg;base64,' + img;
+
+  // FPS
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFpsTime >= 1000) {
+    fpsEl.textContent = frameCount + ' FPS';
+    frameCount = 0; lastFpsTime = now;
+  }
+
+  // Face bounding box
+  faceCanvas.width  = camFeed.offsetWidth;
+  faceCanvas.height = camFeed.offsetHeight;
+  faceCtx.clearRect(0, 0, faceCanvas.width, faceCanvas.height);
+
+  if (box) {
+    const scaleX = faceCanvas.width  / (camFeed.naturalWidth  || 640);
+    const scaleY = faceCanvas.height / (camFeed.naturalHeight || 480);
+    const x1 = box.x1 * scaleX, y1 = box.y1 * scaleY;
+    const x2 = box.x2 * scaleX, y2 = box.y2 * scaleY;
+    const w = x2 - x1, h = y2 - y1;
+    const cs = 16; // corner size
+
+    faceCtx.strokeStyle = '#00f5a0';
+    faceCtx.lineWidth   = 2;
+    faceCtx.shadowColor = '#00f5a0';
+    faceCtx.shadowBlur  = 8;
+
+    // Draw corner brackets instead of full rect
+    [
+      [[x1,y1+cs],[x1,y1],[x1+cs,y1]],
+      [[x2-cs,y1],[x2,y1],[x2,y1+cs]],
+      [[x1,y2-cs],[x1,y2],[x1+cs,y2]],
+      [[x2-cs,y2],[x2,y2],[x2,y2-cs]],
+    ].forEach(pts => {
+      faceCtx.beginPath();
+      faceCtx.moveTo(...pts[0]);
+      faceCtx.lineTo(...pts[1]);
+      faceCtx.lineTo(...pts[2]);
+      faceCtx.stroke();
+    });
+  }
+});
+
+// ── HR Display ─────────────────────────────────────────────────
+const hrValueEl  = document.getElementById('hr-value');
+const hrStatusEl = document.getElementById('hr-status');
+const hrRing     = document.getElementById('hr-ring');
+const heartIcon  = document.getElementById('heart-icon');
+
+function hrZone(hr) {
+  if (hr < 50)  return { label: 'BRADYCARDIA', cls: 'low' };
+  if (hr < 60)  return { label: 'LOW NORMAL',  cls: 'low' };
+  if (hr < 100) return { label: 'NORMAL SINUS', cls: 'normal' };
+  if (hr < 120) return { label: 'ELEVATED',     cls: 'high' };
+  return               { label: 'TACHYCARDIA',  cls: 'high' };
+}
+
+let hrHistory = [];
+
+socket.on('vitals', ({ hr, bvp, timestamps }) => {
+  // ── HR ──
+  if (hr) {
+    hrValueEl.textContent = hr.toFixed(1);
+    const zone = hrZone(hr);
+    hrStatusEl.textContent = zone.label;
+    hrStatusEl.className = 'hr-status ' + zone.cls;
+    hrRing.classList.add('beating');
+    heartIcon.classList.add('beating');
+    // Sync animation speed to BPM
+    const beatDur = (60 / hr).toFixed(2) + 's';
+    hrRing.style.setProperty('--beat-dur', beatDur);
+    document.querySelector('.hr-ring::before');
+    heartIcon.style.animationDuration = beatDur;
+    hrRing.style.animationDuration    = beatDur;
+
+    hrHistory.push({ t: new Date().toLocaleTimeString(), v: hr });
+    if (hrHistory.length > 60) hrHistory.shift();
+    updateHrChart();
+  }
+
+  // ── BVP Oscilloscope ──
+  if (bvp && bvp.length > 2) drawOscilloscope(bvp);
+});
+
+// ── BVP Oscilloscope ────────────────────────────────────────────
+const bvpCanvas = document.getElementById('bvp-canvas');
+const bvpCtx    = bvpCanvas.getContext('2d');
+let bvpBuffer   = new Array(300).fill(0);
+
+function drawOscilloscope(newData) {
+  bvpBuffer.push(...newData);
+  bvpBuffer = bvpBuffer.slice(-300);
+
+  const W = bvpCanvas.offsetWidth;
+  const H = bvpCanvas.offsetHeight;
+  bvpCanvas.width  = W;
+  bvpCanvas.height = H;
+
+  const min = Math.min(...bvpBuffer);
+  const max = Math.max(...bvpBuffer);
+  const range = max - min || 1;
+
+  bvpCtx.clearRect(0, 0, W, H);
+
+  // Glow trail
+  const gradient = bvpCtx.createLinearGradient(0, 0, W, 0);
+  gradient.addColorStop(0,   'rgba(0,245,160,0)');
+  gradient.addColorStop(0.6, 'rgba(0,245,160,0.4)');
+  gradient.addColorStop(1,   'rgba(0,245,160,1)');
+
+  bvpCtx.lineWidth   = 2;
+  bvpCtx.strokeStyle = gradient;
+  bvpCtx.shadowColor = '#00f5a0';
+  bvpCtx.shadowBlur  = 12;
+  bvpCtx.lineJoin    = 'round';
+
+  bvpCtx.beginPath();
+  bvpBuffer.forEach((v, i) => {
+    const x = (i / (bvpBuffer.length - 1)) * W;
+    const y = H - ((v - min) / range) * H * 0.85 - H * 0.075;
+    i === 0 ? bvpCtx.moveTo(x, y) : bvpCtx.lineTo(x, y);
+  });
+  bvpCtx.stroke();
+
+  // Scan-head dot at right edge
+  const lastV = bvpBuffer[bvpBuffer.length - 1];
+  const dotY  = H - ((lastV - min) / range) * H * 0.85 - H * 0.075;
+  bvpCtx.beginPath();
+  bvpCtx.arc(W - 2, dotY, 4, 0, Math.PI * 2);
+  bvpCtx.fillStyle = '#00f5a0';
+  bvpCtx.shadowBlur = 20;
+  bvpCtx.fill();
+}
+
+// ── HR History Chart ────────────────────────────────────────────
+const hrChartCtx = document.getElementById('hr-chart').getContext('2d');
+const hrChart = new Chart(hrChartCtx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      data: [],
+      borderColor: '#00f5a0',
+      borderWidth: 2,
+      backgroundColor: 'rgba(0,245,160,0.07)',
+      pointRadius: 2,
+      pointBackgroundColor: '#00f5a0',
+      tension: 0.4,
+      fill: true,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 400 },
+    plugins: { legend: { display: false } },
+    scales: {
+      x: {
+        ticks: {
+          color: '#8da3c0',
+          font: { family: 'Share Tech Mono', size: 8 },
+          maxTicksLimit: 5,
+          maxRotation: 0,
+        },
+        grid: { color: '#0f1e38' },
+      },
+      y: {
+        ticks: {
+          color: '#8da3c0',
+          font: { family: 'Share Tech Mono', size: 8 },
+        },
+        grid: { color: '#0f1e38' },
+        min: 40, max: 140,
+      }
+    }
+  }
+});
+
+function updateHrChart() {
+  hrChart.data.labels   = hrHistory.map(d => d.t);
+  hrChart.data.datasets[0].data = hrHistory.map(d => d.v);
+  hrChart.update('none');
+}
+</script>
+</body>
+</html>
