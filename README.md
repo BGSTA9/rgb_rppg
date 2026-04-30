@@ -61,7 +61,7 @@ This project was built using the following open-source libraries, packages, and 
 - **[Flask-SocketIO](https://flask-socketio.readthedocs.io/):** Enables low-latency, bi-directional, and real-time communication over WebSockets between the server and the web client. Used for streaming base64-encoded video frames and live physiological data.
 - **[OpenCV (cv2)](https://opencv.org/):** A powerful open-source computer vision library utilized for webcam video capture, color space conversions (RGB to BGR), and image frame encoding.
 - **[NumPy](https://numpy.org/):** The fundamental package for scientific computing with Python, used extensively for array and matrix operations under the hood.
-- **[`open-rppg`](https://pypi.org/project/open-rppg/):** The core open-source implementation used in this project to perform remote photoplethysmography, handling facial detection bounding boxes and generating Heart Rate (HR) and Blood Volume Pulse (BVP) estimations.
+- **[`open-rppg`](https://kegangwangccnu.github.io/open-rppg/):** The core open-source implementation used in this project to perform remote photoplethysmography, handling facial detection bounding boxes and generating Heart Rate (HR) and Blood Volume Pulse (BVP) estimations.
 - **Python Standard Libraries:** 
   - `threading`: Utilized to run the rPPG processing loop asynchronously, ensuring the main Flask thread isn't blocked.
   - `base64`: Used to encode the OpenCV image buffers into base64 strings for transmission over WebSockets to the HTML client.
