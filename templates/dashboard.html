@@ -3,348 +3,1497 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>rPPG · Cardiac Monitor</title>
-  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet"/>
+  <title>rPPG Intelligence Suite</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
   <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1632432234/camera_utils.js" crossorigin="anonymous"></script>
   <style>
     :root {
-      --bg:       #04060d;
-      --panel:    #080c18;
-      --border:   #0f1e38;
-      --green:    #00f5a0;
-      --green-dim:#00a86b;
-      --blue:     #0af;
-      --red:      #ff3b6b;
-      --text:     #8da3c0;
-      --text-hi:  #cde0f5;
-      --glow:     0 0 18px #00f5a080, 0 0 40px #00f5a030;
-      --glow-red: 0 0 18px #ff3b6b80, 0 0 40px #ff3b6b30;
+      --bg:        #02050d;
+      --bg-2:      #050a16;
+      --panel:     #070d1c;
+      --panel-2:   #0a1226;
+      --border:    #11203d;
+      --border-hi: #1a2f55;
+      --green:     #00f5a0;
+      --green-dim: #00a86b;
+      --cyan:      #00d9ff;
+      --blue:      #4a9eff;
+      --purple:    #b66dff;
+      --magenta:   #ff5dc8;
+      --orange:    #ff9d3b;
+      --yellow:    #ffd23b;
+      --red:       #ff3b6b;
+      --text:      #6d83a3;
+      --text-mid:  #8da3c0;
+      --text-hi:   #cde0f5;
+      --text-max:  #ffffff;
+      --glow-g:    0 0 14px #00f5a070, 0 0 28px #00f5a020;
+      --glow-c:    0 0 14px #00d9ff70, 0 0 28px #00d9ff20;
+      --glow-p:    0 0 14px #b66dff70, 0 0 28px #b66dff20;
+      --glow-r:    0 0 14px #ff3b6b80, 0 0 28px #ff3b6b30;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      background: var(--bg);
-      color: var(--text);
+      background: radial-gradient(ellipse at top, #060d22 0%, #02050d 60%);
+      color: var(--text-mid);
       font-family: 'Rajdhani', sans-serif;
+      font-weight: 400;
       height: 100vh;
+      width: 100vw;
       display: grid;
-      grid-template-rows: 56px 1fr;
+      grid-template-rows: 48px 1fr;
       overflow: hidden;
+      font-size: 13px;
     }
 
-    /* ── Header ── */
+    /* ─────────  scrollbars  ───────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #1a2f55; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #2a4575; }
+
+    /* ─────────  header  ───────── */
     header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 24px;
+      padding: 0 18px;
       border-bottom: 1px solid var(--border);
-      background: linear-gradient(90deg, #050810 0%, #08111f 100%);
+      background: linear-gradient(90deg, #050a18 0%, #0a1228 50%, #050a18 100%);
+      position: relative;
+    }
+    header::before {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #00f5a040, transparent);
+    }
+    .logo-block {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .logo-icon {
+      width: 22px; height: 22px;
+      border: 1.5px solid var(--green);
+      border-radius: 50%;
+      position: relative;
+      box-shadow: var(--glow-g);
+    }
+    .logo-icon::after {
+      content: '';
+      position: absolute;
+      inset: 4px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
     }
     .logo {
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 1.4rem;
-      letter-spacing: 4px;
-      color: var(--green);
-      text-shadow: var(--glow);
+      font-size: 1.1rem;
+      letter-spacing: 3px;
+      color: var(--text-hi);
     }
-    .logo span { color: var(--text); text-shadow: none; }
-    .header-meta {
-      display: flex;
-      gap: 32px;
-      align-items: center;
+    .logo .accent { color: var(--green); }
+    .logo .sub {
+      display: block;
       font-family: 'Share Tech Mono', monospace;
-      font-size: 0.75rem;
+      font-size: 0.55rem;
+      letter-spacing: 2px;
+      color: var(--text);
+      margin-top: -2px;
     }
-    .status-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--green);
-      box-shadow: var(--glow);
-      animation: pulse-dot 2s ease-in-out infinite;
-      display: inline-block;
-      margin-right: 6px;
-    }
-    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.3} }
-    #clock { color: var(--blue); }
 
-    /* ── Main Grid ── */
+    .header-center {
+      display: flex; gap: 22px; align-items: center;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 2px;
+    }
+    .header-center .item .lbl {
+      color: var(--text); font-size: 0.55rem; display: block; margin-bottom: 1px;
+    }
+    .header-center .item .val { color: var(--text-hi); font-size: 0.78rem; }
+
+    .header-right {
+      display: flex; gap: 14px; align-items: center;
+    }
+    .status-badge {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 12px;
+      border: 1px solid var(--green);
+      border-radius: 14px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.62rem; letter-spacing: 2px;
+      color: var(--green);
+      background: rgba(0,245,160,0.06);
+      box-shadow: 0 0 10px rgba(0,245,160,0.2) inset;
+    }
+    .status-badge .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    .pill-group { display: flex; gap: 6px; }
+    .pill {
+      padding: 3px 8px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.58rem; letter-spacing: 2px;
+      color: var(--text-mid);
+      border: 1px solid var(--border-hi);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.02);
+    }
+    .pill.live   { color: var(--green);   border-color: var(--green-dim); }
+    .pill.warn   { color: var(--orange);  border-color: var(--orange); }
+    .icon-btn {
+      width: 26px; height: 26px;
+      border: 1px solid var(--border-hi);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.02);
+      color: var(--text-mid);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .icon-btn:hover { color: var(--green); border-color: var(--green-dim); box-shadow: var(--glow-g); }
+
+    @keyframes pulse {
+      0%,100%{opacity:1;transform:scale(1)}
+      50%{opacity:0.4;transform:scale(0.85)}
+    }
+
+    /* ─────────  layout  ───────── */
+    .body-grid {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      overflow: hidden;
+    }
+
+    /* ─────────  sidebar  ───────── */
+    aside {
+      background: linear-gradient(180deg, #050a18 0%, #03060f 100%);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      align-items: center;
+      padding: 14px 0;
+      gap: 4px;
+    }
+    .nav-btn {
+      width: 44px; height: 44px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 2px;
+      cursor: pointer;
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.46rem; letter-spacing: 1px;
+      border-left: 2px solid transparent;
+      transition: all .2s;
+      position: relative;
+    }
+    .nav-btn .icon {
+      font-size: 0.95rem; line-height: 1;
+    }
+    .nav-btn:hover { color: var(--text-hi); background: rgba(255,255,255,0.02); }
+    .nav-btn.active {
+      color: var(--green);
+      border-left-color: var(--green);
+      background: linear-gradient(90deg, rgba(0,245,160,0.12) 0%, transparent 100%);
+    }
+    .nav-btn.active .icon { text-shadow: var(--glow-g); }
+    .nav-divider {
+      width: 30px; height: 1px;
+      background: var(--border);
+      margin: 6px 0;
+    }
+    .sidebar-foot {
+      margin-top: auto;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 6px;
+    }
+    .vertical-text {
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      transform: rotate(180deg);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.5rem; letter-spacing: 2px;
+      color: var(--text);
+    }
+
+    /* ─────────  main grid  ───────── */
     main {
       display: grid;
-      grid-template-columns: 3fr 2fr;
-      grid-template-rows: 32% 38% 30%;
-      gap: 1px;
-      background: var(--border);
+      grid-template-columns: 26fr 28fr 22fr;
+      grid-template-rows: 36% 30% 22% 1fr;
+      gap: 8px;
+      padding: 8px;
       overflow: hidden;
     }
 
-    /* ── Panels ── */
+    /* panel base */
     .panel {
-      background: var(--panel);
+      background: linear-gradient(180deg, #080f20 0%, #050a18 100%);
+      border: 1px solid var(--border);
+      border-radius: 4px;
       position: relative;
       overflow: hidden;
-    }
-    .panel-label {
-      position: absolute;
-      top: 12px; left: 16px;
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 0.65rem;
-      letter-spacing: 3px;
-      color: var(--green-dim);
-      z-index: 2;
-    }
-
-    /* ── Camera Feed ── */
-    #cam-panel {
-      grid-row: 1 / 4;
       display: flex;
-      align-items: center;
-      justify-content: center;
+      flex-direction: column;
     }
-    #cam-wrap { position: relative; width: 100%; height: 100%; }
+    .panel::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 12px; right: 12px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #00d9ff60, transparent);
+      opacity: 0.5;
+    }
+    .panel-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(0,217,255,0.025);
+    }
+    .panel-title {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.62rem; letter-spacing: 2.5px;
+      color: var(--cyan);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .panel-title::before {
+      content: ''; display: inline-block;
+      width: 4px; height: 4px;
+      background: var(--cyan);
+      box-shadow: 0 0 6px var(--cyan);
+      border-radius: 50%;
+    }
+    .panel-tag {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.5rem; letter-spacing: 1.5px;
+      color: var(--text);
+      padding: 1px 6px;
+      border: 1px solid var(--border-hi);
+      border-radius: 3px;
+    }
+    .panel-tag.green  { color: var(--green);  border-color: var(--green-dim); }
+    .panel-tag.purple { color: var(--purple); border-color: #5a3d8a; }
+    .panel-tag.orange { color: var(--orange); border-color: #8a5a3d; }
+    .panel-body { flex: 1; overflow: hidden; padding: 8px; position: relative; display: flex; flex-direction: column; }
+
+    /* corner accents */
+    .corner {
+      position: absolute; width: 8px; height: 8px;
+      border-color: var(--green); border-style: solid; opacity: 0.6;
+      z-index: 5; pointer-events: none;
+    }
+    .corner.tl { top: 3px;    left: 3px;  border-width: 1px 0 0 1px; }
+    .corner.tr { top: 3px;    right: 3px; border-width: 1px 1px 0 0; }
+    .corner.bl { bottom: 3px; left: 3px;  border-width: 0 0 1px 1px; }
+    .corner.br { bottom: 3px; right: 3px; border-width: 0 1px 1px 0; }
+
+    /* ─────────  PANEL: Live Video  ───────── */
+    #live-panel { grid-column: 1; grid-row: 1; }
+    #cam-wrap {
+      position: relative;
+      flex: 1;
+      border-radius: 3px;
+      overflow: hidden;
+      background: #000;
+      min-height: 0;
+    }
     #cam-feed {
       width: 100%; height: 100%;
       object-fit: cover; display: block;
-      filter: saturate(0.8) contrast(1.05);
+      filter: saturate(0.9) contrast(1.05);
+    }
+    #face-canvas, #live-mesh-canvas {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
     }
     #cam-wrap::after {
       content: '';
       position: absolute; inset: 0;
       background: repeating-linear-gradient(
         0deg, transparent, transparent 2px,
-        rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px
+        rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px
       );
       pointer-events: none;
-    }
-    #face-canvas { position: absolute; inset: 0; pointer-events: none; }
-
-    /* ── HR Display ── */
-    #hr-panel {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      padding: 16px;
-    }
-    .hr-ring-wrap { position: relative; width: 190px; height: 190px; }
-    .hr-ring {
-      width: 190px; height: 190px;
-      border-radius: 50%;
-      border: 2px solid var(--border);
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .hr-ring::before {
-      content: '';
-      position: absolute; inset: -6px;
-      border-radius: 50%;
-      border: 1px solid var(--green);
-      box-shadow: var(--glow);
-      animation: ring-pulse 1s ease-in-out infinite;
-      animation-play-state: paused;
-    }
-    .hr-ring.beating::before { animation-play-state: running; }
-    @keyframes ring-pulse {
-      0%   { transform: scale(1);    opacity: 0.8; }
-      50%  { transform: scale(1.06); opacity: 0.3; }
-      100% { transform: scale(1);    opacity: 0.8; }
-    }
-    .hr-number {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 5rem;
-      color: var(--green);
-      text-shadow: var(--glow);
-      line-height: 1;
-      letter-spacing: 2px;
-    }
-    .hr-unit {
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 0.7rem;
-      color: var(--green-dim);
-      letter-spacing: 3px;
-      text-align: center;
-    }
-    .hr-status {
-      font-size: 0.85rem; font-weight: 700;
-      letter-spacing: 2px; color: var(--text);
-    }
-    .hr-status.normal { color: var(--green); }
-    .hr-status.low    { color: var(--blue); }
-    .hr-status.high   { color: var(--red); text-shadow: var(--glow-red); }
-    .heart-icon {
-      position: absolute; bottom: 10px; right: 10px;
-      font-size: 1.2rem;
-      animation: heartbeat 1s ease-in-out infinite;
-      animation-play-state: paused;
-      filter: drop-shadow(0 0 6px var(--red));
-    }
-    .heart-icon.beating { animation-play-state: running; }
-    @keyframes heartbeat {
-      0%{transform:scale(1)} 14%{transform:scale(1.2)}
-      28%{transform:scale(1)} 42%{transform:scale(1.1)}
-      70%{transform:scale(1)} 100%{transform:scale(1)}
-    }
-
-    /* ── BVP Oscilloscope ── */
-    #bvp-panel { padding-top: 36px; }
-    #bvp-canvas { width: 100%; height: calc(100% - 36px); display: block; }
-    .grid-overlay {
-      position: absolute; inset: 36px 0 0 0;
-      background-image:
-        linear-gradient(var(--border) 1px, transparent 1px),
-        linear-gradient(90deg, var(--border) 1px, transparent 1px);
-      background-size: 40px 30px;
-      pointer-events: none; opacity: 0.5;
-    }
-
-    /* ── Facial Perfusion Map ── */
-    #mesh-panel { }
-    #mesh-canvas { width: 100%; height: 100%; display: block; }
-
-    #colorbar {
-      position: absolute;
-      bottom: 10px; left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 0.58rem;
-      color: var(--text);
       z-index: 3;
     }
-    #colorbar-gradient {
-      width: 72px; height: 5px;
-      border-radius: 3px;
-      background: linear-gradient(90deg,
-        #00008b,#0000ff,#00ffff,#00ff00,#ffff00,#ff8000,#ff0000);
-    }
-
-    #mesh-status {
-      position: absolute; top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
+    .roi-tag {
+      position: absolute;
       font-family: 'Share Tech Mono', monospace;
-      font-size: 0.68rem; letter-spacing: 2px;
-      color: var(--green-dim); text-align: center;
-      pointer-events: none; z-index: 2;
+      font-size: 0.52rem;
+      letter-spacing: 1px;
+      color: var(--green);
+      background: rgba(0,15,30,0.7);
+      border: 1px solid var(--green-dim);
+      padding: 1px 5px;
+      border-radius: 2px;
+      pointer-events: none;
+      z-index: 4;
+      text-shadow: 0 0 4px var(--green);
+    }
+    .live-overlay {
+      position: absolute; inset: 0;
+      pointer-events: none;
+      z-index: 4;
+      display: flex; flex-direction: column; justify-content: space-between;
+      padding: 8px;
+    }
+    .overlay-row {
+      display: flex; justify-content: space-between;
+      gap: 4px; flex-wrap: wrap;
+    }
+    .overlay-pill {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.52rem; letter-spacing: 1px;
+      padding: 2px 6px;
+      background: rgba(0,15,30,0.78);
+      border: 1px solid var(--border-hi);
+      border-radius: 2px;
+      color: var(--text-hi);
+      pointer-events: auto;
+    }
+    .overlay-pill .v { color: var(--green); margin-left: 4px; }
+    .overlay-pill.cyan .v { color: var(--cyan); }
+    .overlay-pill.purple .v { color: var(--purple); }
+    .overlay-pill.orange .v { color: var(--orange); }
+    .live-status {
+      display: flex; gap: 10px; padding-top: 6px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.55rem; letter-spacing: 1.5px;
+      color: var(--text);
+    }
+    .live-status span b { color: var(--green); font-weight: 500; margin-left: 3px;}
+
+    /* ─────────  PANEL: Core Physiological Metrics  ───────── */
+    #metrics-panel { grid-column: 2; grid-row: 1; }
+    .metrics-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 6px;
+      min-height: 0;
+    }
+    .metric-card {
+      background: linear-gradient(180deg, #0a1226 0%, #060c1a 100%);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 7px 9px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+      min-height: 0;
+    }
+    .metric-card::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 2px; height: 100%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+    }
+    .metric-card.purple::after { background: var(--purple); box-shadow: 0 0 8px var(--purple); }
+    .metric-card.cyan::after   { background: var(--cyan);   box-shadow: 0 0 8px var(--cyan); }
+    .metric-card.orange::after { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+    .metric-card.magenta::after{ background: var(--magenta);box-shadow: 0 0 8px var(--magenta); }
+    .metric-card.blue::after   { background: var(--blue);   box-shadow: 0 0 8px var(--blue); }
+    .metric-head {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .metric-name {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.55rem; letter-spacing: 1.5px;
+      color: var(--text);
+    }
+    .metric-trend {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.5rem;
+      color: var(--green);
+    }
+    .metric-trend.down { color: var(--red); }
+    .metric-value-row {
+      display: flex; align-items: baseline; gap: 5px; margin-top: 1px;
+    }
+    .metric-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.7rem; line-height: 1;
+      color: var(--green);
+      letter-spacing: 1px;
+      text-shadow: var(--glow-g);
+    }
+    .metric-card.purple .metric-value { color: var(--purple); text-shadow: var(--glow-p); }
+    .metric-card.cyan   .metric-value { color: var(--cyan); text-shadow: var(--glow-c); }
+    .metric-card.orange .metric-value { color: var(--orange); text-shadow: 0 0 12px #ff9d3b80; }
+    .metric-card.magenta .metric-value { color: var(--magenta); text-shadow: 0 0 12px #ff5dc880; }
+    .metric-card.blue .metric-value { color: var(--blue); text-shadow: 0 0 12px #4a9eff80; }
+    .metric-unit {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.55rem; letter-spacing: 1px;
+      color: var(--text);
+    }
+    .metric-spark {
+      flex: 1;
+      min-height: 18px;
+      max-height: 30px;
+      width: 100%;
+      margin-top: 2px;
+    }
+    .metric-foot {
+      display: flex; justify-content: space-between;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.48rem; letter-spacing: 1px;
+      color: var(--text);
+      padding-top: 2px;
+    }
+    .metric-foot .conf { color: var(--green); }
+
+    /* ─────────  PANEL: Signal Quality  ───────── */
+    #quality-panel { grid-column: 3; grid-row: 1; }
+    .quality-content { flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+    .qbar-row {
+      display: flex; align-items: center; gap: 6px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.55rem; letter-spacing: 1px;
+    }
+    .qbar-label { color: var(--text-mid); width: 58%; flex-shrink: 0; }
+    .qbar-track {
+      flex: 1; height: 5px;
+      background: var(--border);
+      border-radius: 2px;
+      position: relative;
+      overflow: hidden;
+    }
+    .qbar-fill {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      background: linear-gradient(90deg, var(--green-dim), var(--green));
+      border-radius: 2px;
+      box-shadow: 0 0 8px var(--green);
+      transition: width .5s ease;
+    }
+    .qbar-fill.warn { background: linear-gradient(90deg, #c97a2a, var(--orange)); box-shadow: 0 0 8px var(--orange); }
+    .qbar-fill.bad  { background: linear-gradient(90deg, #993248, var(--red)); box-shadow: 0 0 8px var(--red); }
+    .qbar-val { width: 28px; text-align: right; color: var(--text-hi); font-size: 0.58rem; }
+
+    .quality-score {
+      margin-top: auto;
+      display: flex; flex-direction: column; align-items: center;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+    .qs-num {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 2.2rem;
+      color: var(--green);
+      text-shadow: var(--glow-g);
+      letter-spacing: 2px;
+      line-height: 1;
+    }
+    .qs-lbl {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.5rem; letter-spacing: 2px;
+      color: var(--text);
+      margin-top: 2px;
     }
 
-    /* ── Corners ── */
-    .corner {
-      position: absolute; width: 12px; height: 12px;
-      border-color: var(--green); border-style: solid; opacity: 0.5;
+    /* ─────────  PANEL: Waveform & Frequency  ───────── */
+    #wave-panel { grid-column: 1 / span 2; grid-row: 2; }
+    .wave-tabs {
+      display: flex; gap: 4px;
     }
-    .corner.tl { top: 8px;    left: 8px;  border-width: 1px 0 0 1px; }
-    .corner.tr { top: 8px;    right: 8px; border-width: 1px 1px 0 0; }
-    .corner.bl { bottom: 8px; left: 8px;  border-width: 0 0 1px 1px; }
-    .corner.br { bottom: 8px; right: 8px; border-width: 0 1px 1px 0; }
+    .wave-tab {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.5rem; letter-spacing: 1.5px;
+      padding: 2px 8px;
+      border: 1px solid var(--border-hi);
+      border-radius: 2px;
+      color: var(--text);
+      background: transparent;
+      cursor: pointer;
+    }
+    .wave-tab.active {
+      color: var(--green); border-color: var(--green-dim);
+      background: rgba(0,245,160,0.08);
+    }
+    .wave-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 6px;
+      min-height: 0;
+    }
+    .wave-cell {
+      background: linear-gradient(180deg, #050a18 0%, #03060f 100%);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      position: relative;
+      overflow: hidden;
+      display: flex; flex-direction: column;
+      min-height: 0;
+    }
+    .wave-cell-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .wave-cell-title {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.55rem; letter-spacing: 1.5px;
+      color: var(--text-mid);
+    }
+    .wave-cell-meta {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.5rem;
+      color: var(--text);
+    }
+    .wave-cell-meta b { color: var(--green); margin-left: 4px; }
+    .wave-cell canvas {
+      flex: 1;
+      width: 100%;
+      display: block;
+    }
+    .wave-grid-overlay {
+      position: absolute; inset: 22px 0 0 0;
+      background-image:
+        linear-gradient(rgba(20,40,80,0.4) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(20,40,80,0.4) 1px, transparent 1px);
+      background-size: 30px 25px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* col-3 row-2 wrapper: alerts (top) + roi heatmap (bottom) stacked */
+    #col3-stack {
+      grid-column: 3;
+      grid-row: 2;
+      display: grid;
+      grid-template-rows: 1fr 1fr;
+      gap: 8px;
+      min-height: 0;
+    }
+    /* ─────────  PANEL: Smart Alerts  ───────── */
+    #alerts-panel { min-height: 0; }
+    .alerts-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+    .alert-item {
+      display: flex; gap: 8px;
+      padding: 6px 8px;
+      border-left: 2px solid var(--green);
+      background: linear-gradient(90deg, rgba(0,245,160,0.07) 0%, transparent 100%);
+      border-radius: 2px;
+    }
+    .alert-item.warn { border-left-color: var(--orange); background: linear-gradient(90deg, rgba(255,157,59,0.07) 0%, transparent 100%); }
+    .alert-item.info { border-left-color: var(--cyan); background: linear-gradient(90deg, rgba(0,217,255,0.07) 0%, transparent 100%); }
+    .alert-item.bad  { border-left-color: var(--red); background: linear-gradient(90deg, rgba(255,59,107,0.07) 0%, transparent 100%); }
+    .alert-icon {
+      font-size: 0.85rem;
+      color: var(--green);
+      line-height: 1.2;
+    }
+    .alert-item.warn .alert-icon { color: var(--orange); }
+    .alert-item.info .alert-icon { color: var(--cyan); }
+    .alert-item.bad  .alert-icon { color: var(--red); }
+    .alert-text { flex: 1; min-width: 0; }
+    .alert-title {
+      font-size: 0.7rem;
+      color: var(--text-hi);
+      letter-spacing: 0.5px;
+    }
+    .alert-sub {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.5rem; letter-spacing: 1px;
+      color: var(--text);
+      margin-top: 1px;
+    }
+
+    /* ─────────  PANEL: ROI Contribution  ───────── */
+    #roi-panel { min-height: 0; }
+    #roi-canvas { width: 100%; flex: 1; min-height: 0; display: block; }
+    .roi-legend {
+      display: flex; justify-content: space-between;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.5rem; letter-spacing: 1px;
+      color: var(--text);
+      padding-top: 4px;
+    }
+    .roi-legend .grad {
+      flex: 1;
+      height: 4px;
+      margin: auto 6px;
+      border-radius: 2px;
+      background: linear-gradient(90deg,#1d3a5e,#0066aa,#00aaff,#00f5a0,#ffd23b,#ff8c1a,#ff3b6b);
+    }
+
+    /* row 3 layout helper (4 panels) */
+    #row3-grid {
+      grid-column: 1 / span 3;
+      grid-row: 3;
+      display: grid;
+      grid-template-columns: 23fr 22fr 22fr 33fr;
+      gap: 8px;
+      min-height: 0;
+    }
+    /* row 4 (trend strip) */
+    #trend-panel {
+      grid-column: 1 / span 3;
+      grid-row: 4;
+      min-height: 0;
+    }
+
+    /* AI Model Insights */
+    #ai-panel { display: flex; flex-direction: column; }
+    .ai-content { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; min-height: 0; }
+    .ai-conf {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 4px;
+      padding: 4px;
+    }
+    .ai-ring-wrap {
+      position: relative; width: 78px; height: 78px;
+    }
+    .ai-ring-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .ai-ring-bg { fill: none; stroke: var(--border); stroke-width: 4; }
+    .ai-ring-fg { fill: none; stroke: var(--green); stroke-width: 4; stroke-linecap: round; filter: drop-shadow(0 0 4px var(--green)); }
+    .ai-ring-num {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.2rem;
+      color: var(--green);
+      text-shadow: var(--glow-g);
+    }
+    .ai-conf-lbl {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.5rem; letter-spacing: 1.5px;
+      color: var(--text);
+      text-align: center;
+    }
+    .ai-stack {
+      display: flex; flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .ai-mini-row {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.5rem; letter-spacing: 1px;
+      display: flex; flex-direction: column;
+      gap: 2px;
+    }
+    .ai-mini-row .head {
+      display: flex; justify-content: space-between;
+      color: var(--text);
+    }
+    .ai-mini-row .head b { color: var(--text-hi); font-weight: 500; }
+    .ai-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      position: relative;
+    }
+    .ai-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--purple), var(--magenta));
+      box-shadow: 0 0 6px var(--purple);
+    }
+    .ai-bar-fill.cyan { background: linear-gradient(90deg, #006a8a, var(--cyan)); box-shadow: 0 0 6px var(--cyan); }
+    .ai-bar-fill.green { background: linear-gradient(90deg, var(--green-dim), var(--green)); box-shadow: 0 0 6px var(--green); }
+    .ai-bar-fill.orange { background: linear-gradient(90deg, #8f5c1c, var(--orange)); box-shadow: 0 0 6px var(--orange); }
+
+    .attn-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border-radius: 2px;
+    }
+
+    /* Environment / Hardware */
+    .env-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 6px;
+      min-height: 0;
+    }
+    .env-card {
+      background: linear-gradient(180deg, #0a1226 0%, #060c1a 100%);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 6px 8px;
+      display: flex; flex-direction: column;
+      gap: 2px;
+      min-height: 0;
+    }
+    .env-name {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.5rem; letter-spacing: 1px;
+      color: var(--text);
+    }
+    .env-val {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.3rem;
+      color: var(--cyan);
+      text-shadow: var(--glow-c);
+      letter-spacing: 1px;
+      line-height: 1;
+    }
+    .env-card.green .env-val { color: var(--green); text-shadow: var(--glow-g); }
+    .env-card.purple .env-val { color: var(--purple); text-shadow: var(--glow-p); }
+    .env-card.orange .env-val { color: var(--orange); text-shadow: 0 0 8px var(--orange); }
+    .env-unit {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.5rem;
+      color: var(--text);
+      margin-left: 3px;
+    }
+    .env-bar {
+      margin-top: auto;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      position: relative;
+    }
+    .env-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #006a8a, var(--cyan));
+      box-shadow: 0 0 6px var(--cyan);
+    }
+    .env-card.green .env-bar-fill  { background: linear-gradient(90deg, var(--green-dim), var(--green)); box-shadow: 0 0 6px var(--green); }
+    .env-card.purple .env-bar-fill { background: linear-gradient(90deg, #5a3d8a, var(--purple)); box-shadow: 0 0 6px var(--purple); }
+    .env-card.orange .env-bar-fill { background: linear-gradient(90deg, #8f5c1c, var(--orange)); box-shadow: 0 0 6px var(--orange); }
+
+    /* System Performance */
+    .sys-list { flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+    .sys-row {
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .sys-row-head {
+      display: flex; justify-content: space-between;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.55rem; letter-spacing: 1px;
+    }
+    .sys-row-head .lbl { color: var(--text-mid); }
+    .sys-row-head .val { color: var(--text-hi); }
+    .sys-row-head .val b { color: var(--green); font-weight: 500; }
+    .sys-row .ai-bar { height: 4px; }
+
+    .sys-mini-chart {
+      width: 100%;
+      height: 24px;
+      margin-top: 2px;
+    }
+
+    /* Trend History + Decision */
+    .trend-content { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; min-height: 0; }
+    .trend-card {
+      background: linear-gradient(180deg, #0a1226 0%, #060c1a 100%);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 6px 8px;
+      display: flex; flex-direction: column;
+      min-height: 0;
+    }
+    .trend-card-head {
+      display: flex; justify-content: space-between;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.5rem;
+      color: var(--text);
+      letter-spacing: 1px;
+    }
+    .trend-card-head b {
+      color: var(--green); font-weight: 500;
+      letter-spacing: 0.5px;
+    }
+    .trend-card.purple  .trend-card-head b { color: var(--purple); }
+    .trend-card.cyan    .trend-card-head b { color: var(--cyan); }
+    .trend-card.orange  .trend-card-head b { color: var(--orange); }
+    .trend-card.magenta .trend-card-head b { color: var(--magenta); }
+    .trend-card canvas { flex: 1; width: 100%; min-height: 0; }
+
+    /* Decision panel */
+    #decision-panel { display: flex; flex-direction: column; }
+    .decision-content {
+      flex: 1; display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 8px;
+      min-height: 0;
+    }
+    .decision-score {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 4px;
+    }
+    .decision-rec {
+      flex: 1;
+      display: flex; flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+      min-height: 0;
+    }
+    .rec-item {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.55rem; letter-spacing: 0.5px;
+      color: var(--text-mid);
+      padding: 5px 7px;
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--green);
+      border-radius: 2px;
+      background: rgba(0,245,160,0.04);
+    }
+    .rec-item .tag {
+      display: inline-block;
+      font-size: 0.46rem;
+      color: var(--green);
+      margin-right: 4px;
+      letter-spacing: 1px;
+    }
+    .rec-item.warn { border-left-color: var(--orange); background: rgba(255,157,59,0.04); }
+    .rec-item.warn .tag { color: var(--orange); }
+    .rec-item.info { border-left-color: var(--cyan); background: rgba(0,217,255,0.04); }
+    .rec-item.info .tag { color: var(--cyan); }
+
+    /* Decision quality circle */
+    .dq-ring-wrap {
+      position: relative; width: 70px; height: 70px;
+    }
+    .dq-ring-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .dq-ring-num {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.05rem;
+      color: var(--green);
+      text-shadow: var(--glow-g);
+      line-height: 1;
+    }
+    .dq-ring-num small {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.4rem;
+      letter-spacing: 1px;
+      color: var(--text);
+    }
+
+    /* utility */
+    .blink { animation: blink 1.6s ease-in-out infinite; }
+    @keyframes blink { 0%,100% {opacity: 1} 50% {opacity: 0.4} }
   </style>
 </head>
 <body>
 
 <video id="mp-video" playsinline style="display:none"></video>
 
+<!-- ════════ HEADER ════════ -->
 <header>
-  <div class="logo">rPPG <span>· CARDIAC MONITOR</span></div>
-  <div class="header-meta">
-    <span><span class="status-dot"></span><span id="status-text">CONNECTING</span></span>
-    <span id="clock">00:00:00</span>
-    <span id="fps-counter">-- FPS</span>
+  <div class="logo-block">
+    <div class="logo-icon"></div>
+    <div class="logo">
+      <span class="accent">rPPG</span> INTELLIGENCE SUITE
+      <span class="sub">Real-Time Biomedical Monitor</span>
+    </div>
+  </div>
+  <div class="header-center">
+    <div class="item">
+      <span class="lbl">SESSION</span>
+      <span class="val" id="hdr-session">JUN 26 · 2025</span>
+    </div>
+    <div class="item">
+      <span class="lbl">UPTIME</span>
+      <span class="val" id="hdr-uptime">00 : 00</span>
+    </div>
+    <div class="item">
+      <span class="lbl">SAMPLES</span>
+      <span class="val" id="hdr-samples">0</span>
+    </div>
+    <div class="item">
+      <span class="lbl">CLOCK</span>
+      <span class="val" id="hdr-clock">00:00:00</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="status-badge"><span class="dot"></span><span id="hdr-status">EXCELLENT</span></span>
+    <div class="pill-group">
+      <span class="pill live" id="hdr-live">● LIVE</span>
+      <span class="pill" id="hdr-fps">-- FPS</span>
+      <span class="pill" id="hdr-net">NET 0 ms</span>
+    </div>
+    <div class="pill-group">
+      <button class="icon-btn" title="Record">⦿</button>
+      <button class="icon-btn" title="Settings">⚙</button>
+      <button class="icon-btn" title="Calibrate">⊕</button>
+      <button class="icon-btn" title="Export">⤓</button>
+    </div>
   </div>
 </header>
 
-<main>
-  <!-- Camera -->
-  <div class="panel" id="cam-panel">
-    <div class="panel-label">OPTICAL · CAMERA FEED</div>
-    <div id="cam-wrap">
-      <img id="cam-feed" alt=""/>
-      <canvas id="face-canvas"></canvas>
-    </div>
-    <div class="corner tl"></div><div class="corner tr"></div>
-    <div class="corner bl"></div><div class="corner br"></div>
-  </div>
+<div class="body-grid">
 
-  <!-- HR Display -->
-  <div class="panel" id="hr-panel">
-    <div class="panel-label">HEART RATE</div>
-    <div class="corner tl"></div><div class="corner tr"></div>
-    <div class="corner bl"></div><div class="corner br"></div>
-    <div class="hr-ring-wrap">
-      <div class="hr-ring" id="hr-ring">
-        <div>
-          <div class="hr-number" id="hr-value">--</div>
-          <div class="hr-unit">BPM</div>
+  <!-- ════════ SIDEBAR ════════ -->
+  <aside>
+    <div class="nav-btn active"><div class="icon">▦</div><div>OVR</div></div>
+    <div class="nav-btn"><div class="icon">♥</div><div>PHY</div></div>
+    <div class="nav-btn"><div class="icon">≋</div><div>SIG</div></div>
+    <div class="nav-btn"><div class="icon">∿</div><div>WAV</div></div>
+    <div class="nav-btn"><div class="icon">▤</div><div>FRQ</div></div>
+    <div class="nav-divider"></div>
+    <div class="nav-btn"><div class="icon">◈</div><div>AI</div></div>
+    <div class="nav-btn"><div class="icon">◉</div><div>HW</div></div>
+    <div class="nav-btn"><div class="icon">▣</div><div>SYS</div></div>
+    <div class="nav-divider"></div>
+    <div class="nav-btn"><div class="icon">⚠</div><div>ALR</div></div>
+    <div class="nav-btn"><div class="icon">⌖</div><div>HIS</div></div>
+    <div class="nav-btn"><div class="icon">⎈</div><div>DEC</div></div>
+    <div class="sidebar-foot">
+      <div class="vertical-text">v2.4.1</div>
+    </div>
+  </aside>
+
+  <!-- ════════ MAIN ════════ -->
+  <main>
+
+    <!-- ─────  Live Video & ROI  ───── -->
+    <div class="panel" id="live-panel">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+      <div class="panel-head">
+        <div class="panel-title">LIVE VIDEO &amp; ROI TRACKING</div>
+        <div class="panel-tag green" id="live-tag">▶ TRACKING</div>
+      </div>
+      <div class="panel-body" style="padding: 6px;">
+        <div id="cam-wrap">
+          <img id="cam-feed" alt=""/>
+          <canvas id="face-canvas"></canvas>
+          <canvas id="live-mesh-canvas"></canvas>
+          <div class="live-overlay">
+            <div class="overlay-row">
+              <span class="overlay-pill">CONFIDENCE<span class="v" id="live-conf">95%</span></span>
+              <span class="overlay-pill cyan">ROI Q<span class="v" id="live-roiq">98%</span></span>
+            </div>
+            <div class="overlay-row">
+              <span class="overlay-pill purple">FACE<span class="v" id="live-face">LOCKED</span></span>
+              <span class="overlay-pill orange">MOTION<span class="v" id="live-motion">0.08</span></span>
+            </div>
+          </div>
+        </div>
+        <div class="live-status">
+          <span>ROI <b id="live-roi">forehead</b></span>
+          <span>FOV <b>62°</b></span>
+          <span>POS <b>CHROM</b></span>
+          <span>SKIN <b>0.91</b></span>
         </div>
       </div>
-      <div class="heart-icon" id="heart-icon">♥</div>
     </div>
-    <div class="hr-status" id="hr-status">ACQUIRING SIGNAL</div>
-  </div>
 
-  <!-- BVP Oscilloscope -->
-  <div class="panel" id="bvp-panel">
-    <div class="panel-label">BVP · BLOOD VOLUME PULSE</div>
-    <div class="grid-overlay"></div>
-    <canvas id="bvp-canvas"></canvas>
-    <div class="corner tl"></div><div class="corner tr"></div>
-    <div class="corner bl"></div><div class="corner br"></div>
-  </div>
-
-  <!-- Facial Perfusion Map -->
-  <div class="panel" id="mesh-panel">
-    <div class="panel-label">FACIAL PERFUSION MAP</div>
-    <div id="mesh-status">INITIALIZING FACE MESH...</div>
-    <canvas id="mesh-canvas"></canvas>
-    <div id="colorbar">
-      <span>LOW</span>
-      <div id="colorbar-gradient"></div>
-      <span>HIGH</span>
+    <!-- ─────  Core Physiological Metrics  ───── -->
+    <div class="panel" id="metrics-panel">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+      <div class="panel-head">
+        <div class="panel-title">CORE PHYSIOLOGICAL METRICS</div>
+        <div class="panel-tag">▮ 5 STREAMS</div>
+      </div>
+      <div class="panel-body">
+        <div class="metrics-grid">
+          <!-- HR -->
+          <div class="metric-card">
+            <div class="metric-head">
+              <span class="metric-name">HEART RATE</span>
+              <span class="metric-trend" id="trend-hr">▲ 2.1</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="m-hr">72.4</span>
+              <span class="metric-unit">BPM</span>
+            </div>
+            <canvas class="metric-spark" data-key="hr"></canvas>
+            <div class="metric-foot">
+              <span>NORMAL SINUS</span>
+              <span class="conf">CONF 96%</span>
+            </div>
+          </div>
+          <!-- HRV -->
+          <div class="metric-card purple">
+            <div class="metric-head">
+              <span class="metric-name">HRV · RMSSD</span>
+              <span class="metric-trend">▲ 0.6</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="m-hrv">45.2</span>
+              <span class="metric-unit">ms</span>
+            </div>
+            <canvas class="metric-spark" data-key="hrv"></canvas>
+            <div class="metric-foot">
+              <span>SDNN 38.5</span>
+              <span class="conf" style="color: var(--purple)">CONF 91%</span>
+            </div>
+          </div>
+          <!-- RR -->
+          <div class="metric-card cyan">
+            <div class="metric-head">
+              <span class="metric-name">RESP RATE</span>
+              <span class="metric-trend">▼ 0.3</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="m-rr">16.2</span>
+              <span class="metric-unit">br/min</span>
+            </div>
+            <canvas class="metric-spark" data-key="rr"></canvas>
+            <div class="metric-foot">
+              <span>NOMINAL</span>
+              <span class="conf" style="color: var(--cyan)">CONF 88%</span>
+            </div>
+          </div>
+          <!-- SpO₂ -->
+          <div class="metric-card orange">
+            <div class="metric-head">
+              <span class="metric-name">SpO₂</span>
+              <span class="metric-trend">▲ 0.0</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="m-spo2">98</span>
+              <span class="metric-unit">%</span>
+            </div>
+            <canvas class="metric-spark" data-key="spo2"></canvas>
+            <div class="metric-foot">
+              <span>OPTIMAL</span>
+              <span class="conf" style="color: var(--orange)">CONF 84%</span>
+            </div>
+          </div>
+          <!-- PI -->
+          <div class="metric-card magenta">
+            <div class="metric-head">
+              <span class="metric-name">PERFUSION INDEX</span>
+              <span class="metric-trend">▲ 0.2</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="m-pi">2.1</span>
+              <span class="metric-unit">%</span>
+            </div>
+            <canvas class="metric-spark" data-key="pi"></canvas>
+            <div class="metric-foot">
+              <span>STRONG</span>
+              <span class="conf" style="color: var(--magenta)">CONF 90%</span>
+            </div>
+          </div>
+          <!-- LF/HF -->
+          <div class="metric-card blue">
+            <div class="metric-head">
+              <span class="metric-name">LF / HF RATIO</span>
+              <span class="metric-trend down">▼ 0.05</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="m-lfhf">1.42</span>
+              <span class="metric-unit">ratio</span>
+            </div>
+            <canvas class="metric-spark" data-key="lfhf"></canvas>
+            <div class="metric-foot">
+              <span>BALANCED ANS</span>
+              <span class="conf" style="color: var(--blue)">CONF 86%</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="corner tl"></div><div class="corner tr"></div>
-    <div class="corner bl"></div><div class="corner br"></div>
-  </div>
-</main>
 
+    <!-- ─────  Signal Quality + Smart Alerts + ROI Heatmap (column 3 spans 2 rows) ───── -->
+    <div class="panel" id="quality-panel">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+      <div class="panel-head">
+        <div class="panel-title">SIGNAL QUALITY</div>
+        <div class="panel-tag green">▲ EXCELLENT</div>
+      </div>
+      <div class="panel-body">
+        <div class="quality-content">
+          <div class="qbar-row"><span class="qbar-label">SNR</span><div class="qbar-track"><div class="qbar-fill" id="q-snr" style="width:91%"></div></div><span class="qbar-val" id="q-snr-v">32.6</span></div>
+          <div class="qbar-row"><span class="qbar-label">MOTION ARTIFACT</span><div class="qbar-track"><div class="qbar-fill" id="q-motion" style="width:14%"></div></div><span class="qbar-val" id="q-motion-v">0.08</span></div>
+          <div class="qbar-row"><span class="qbar-label">ILLUMINATION STAB</span><div class="qbar-track"><div class="qbar-fill" id="q-illum" style="width:88%"></div></div><span class="qbar-val" id="q-illum-v">88</span></div>
+          <div class="qbar-row"><span class="qbar-label">ROI TRACKING</span><div class="qbar-track"><div class="qbar-fill" id="q-roi" style="width:96%"></div></div><span class="qbar-val" id="q-roi-v">96</span></div>
+          <div class="qbar-row"><span class="qbar-label">SKIN SEGMENTATION</span><div class="qbar-track"><div class="qbar-fill" id="q-skin" style="width:91%"></div></div><span class="qbar-val" id="q-skin-v">91</span></div>
+          <div class="qbar-row"><span class="qbar-label">FREQUENCY STABILITY</span><div class="qbar-track"><div class="qbar-fill" id="q-freq" style="width:93%"></div></div><span class="qbar-val" id="q-freq-v">93</span></div>
+          <div class="qbar-row"><span class="qbar-label">SPECTRAL PURITY</span><div class="qbar-track"><div class="qbar-fill" id="q-spec" style="width:86%"></div></div><span class="qbar-val" id="q-spec-v">86</span></div>
+          <div class="quality-score">
+            <div class="qs-num" id="q-overall">92%</div>
+            <div class="qs-lbl">OVERALL QUALITY SCORE</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────  Waveform & Frequency Analysis  ───── -->
+    <div class="panel" id="wave-panel">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+      <div class="panel-head">
+        <div class="panel-title">WAVEFORM &amp; FREQUENCY ANALYSIS</div>
+        <div class="wave-tabs">
+          <span class="wave-tab active">TIME</span>
+          <span class="wave-tab">FREQ</span>
+          <span class="wave-tab">PEAK</span>
+          <span class="wave-tab">FILTER</span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="wave-grid">
+          <div class="wave-cell">
+            <div class="wave-cell-head">
+              <span class="wave-cell-title">BVP · BLOOD VOLUME PULSE</span>
+              <span class="wave-cell-meta">AMP <b id="bvp-amp">0.84</b></span>
+            </div>
+            <div class="wave-grid-overlay"></div>
+            <canvas id="wave-bvp"></canvas>
+          </div>
+          <div class="wave-cell">
+            <div class="wave-cell-head">
+              <span class="wave-cell-title">FFT · FREQUENCY DOMAIN</span>
+              <span class="wave-cell-meta">PEAK <b id="fft-peak">1.21 Hz</b></span>
+            </div>
+            <div class="wave-grid-overlay"></div>
+            <canvas id="wave-fft"></canvas>
+          </div>
+          <div class="wave-cell">
+            <div class="wave-cell-head">
+              <span class="wave-cell-title">PEAK DETECTION</span>
+              <span class="wave-cell-meta">IBI <b id="peak-ibi">828 ms</b></span>
+            </div>
+            <div class="wave-grid-overlay"></div>
+            <canvas id="wave-peak"></canvas>
+          </div>
+          <div class="wave-cell">
+            <div class="wave-cell-head">
+              <span class="wave-cell-title">FILTER · BANDPASS 0.7-4 Hz</span>
+              <span class="wave-cell-meta">CUTOFF <b>0.7 / 4.0</b></span>
+            </div>
+            <div class="wave-grid-overlay"></div>
+            <canvas id="wave-filter"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────  Column 3 stack: Smart Alerts (top) + ROI Heatmap (bottom)  ───── -->
+    <div id="col3-stack">
+
+    <!-- ─────  Smart Alerts  ───── -->
+    <div class="panel" id="alerts-panel">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+      <div class="panel-head">
+        <div class="panel-title">SMART ALERTS</div>
+        <div class="panel-tag" id="alert-count">3 ACTIVE</div>
+      </div>
+      <div class="panel-body">
+        <div class="alerts-list" id="alerts-list">
+          <div class="alert-item">
+            <div class="alert-icon">✓</div>
+            <div class="alert-text">
+              <div class="alert-title">Signal lock established</div>
+              <div class="alert-sub">22:14 · CHROM · SNR 32.6 dB</div>
+            </div>
+          </div>
+          <div class="alert-item info">
+            <div class="alert-icon">ℹ</div>
+            <div class="alert-text">
+              <div class="alert-title">Auto-calibration completed</div>
+              <div class="alert-sub">22:13 · 6.4 s window</div>
+            </div>
+          </div>
+          <div class="alert-item warn">
+            <div class="alert-icon">▲</div>
+            <div class="alert-text">
+              <div class="alert-title">Minor head motion detected</div>
+              <div class="alert-sub">22:12 · adapt ROI weights</div>
+            </div>
+          </div>
+          <div class="alert-item">
+            <div class="alert-icon">✓</div>
+            <div class="alert-text">
+              <div class="alert-title">Forehead ROI re-locked</div>
+              <div class="alert-sub">22:11 · contribution 0.42</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────  ROI Contribution Heatmap  ───── -->
+    <div class="panel" id="roi-panel">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+      <div class="panel-head">
+        <div class="panel-title">ROI CONTRIBUTION</div>
+        <div class="panel-tag purple">PERFUSION MAP</div>
+      </div>
+      <div class="panel-body">
+        <canvas id="roi-canvas"></canvas>
+        <div class="roi-legend">
+          <span>LOW</span>
+          <div class="grad"></div>
+          <span>HIGH</span>
+        </div>
+      </div>
+    </div>
+
+    </div><!-- /#col3-stack -->
+
+    <!-- ─────  Row 3 (4 panels)  ───── -->
+    <div id="row3-grid">
+
+      <!-- AI/Model Insights -->
+      <div class="panel" id="ai-panel">
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+        <div class="panel-head">
+          <div class="panel-title">AI / MODEL INTELLIGENCE</div>
+          <div class="panel-tag purple">v2.4</div>
+        </div>
+        <div class="panel-body">
+          <div class="ai-content">
+            <div class="ai-conf">
+              <div class="ai-ring-wrap">
+                <svg viewBox="0 0 36 36">
+                  <circle class="ai-ring-bg" cx="18" cy="18" r="15.9"/>
+                  <circle class="ai-ring-fg" id="ai-ring" cx="18" cy="18" r="15.9"
+                          stroke-dasharray="92, 100"/>
+                </svg>
+                <div class="ai-ring-num" id="ai-ring-num">92%</div>
+              </div>
+              <div class="ai-conf-lbl">CONFIDENCE</div>
+              <canvas id="attn-canvas" class="attn-canvas" style="width:100%;height:46px"></canvas>
+              <div class="ai-conf-lbl">ATTENTION MAP</div>
+            </div>
+            <div class="ai-stack">
+              <div class="ai-mini-row">
+                <div class="head"><span>FEATURE: GREEN-CHROM</span><b>0.42</b></div>
+                <div class="ai-bar"><div class="ai-bar-fill" style="width:42%"></div></div>
+              </div>
+              <div class="ai-mini-row">
+                <div class="head"><span>FEATURE: POS</span><b>0.31</b></div>
+                <div class="ai-bar"><div class="ai-bar-fill cyan" style="width:31%"></div></div>
+              </div>
+              <div class="ai-mini-row">
+                <div class="head"><span>FEATURE: SPEC ENT</span><b>0.18</b></div>
+                <div class="ai-bar"><div class="ai-bar-fill green" style="width:18%"></div></div>
+              </div>
+              <div class="ai-mini-row">
+                <div class="head"><span>FEATURE: PHASE COH</span><b>0.09</b></div>
+                <div class="ai-bar"><div class="ai-bar-fill orange" style="width:9%"></div></div>
+              </div>
+              <div class="ai-mini-row" style="margin-top:auto">
+                <div class="head"><span>PREDICTION DRIFT</span><b id="ai-drift">0.012</b></div>
+                <canvas id="drift-canvas" style="width:100%;height:20px"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Environment / Hardware -->
+      <div class="panel" id="env-panel">
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+        <div class="panel-head">
+          <div class="panel-title">ENVIRONMENT &amp; HARDWARE</div>
+          <div class="panel-tag orange">TELEMETRY</div>
+        </div>
+        <div class="panel-body">
+          <div class="env-grid">
+            <div class="env-card green">
+              <span class="env-name">FRAME RATE</span>
+              <span><span class="env-val" id="env-fps">30</span><span class="env-unit">FPS</span></span>
+              <div class="env-bar"><div class="env-bar-fill" id="env-fps-bar" style="width:80%"></div></div>
+            </div>
+            <div class="env-card">
+              <span class="env-name">EXPOSURE</span>
+              <span><span class="env-val" id="env-exp">42</span><span class="env-unit">ms</span></span>
+              <div class="env-bar"><div class="env-bar-fill" id="env-exp-bar" style="width:55%"></div></div>
+            </div>
+            <div class="env-card purple">
+              <span class="env-name">GAIN</span>
+              <span><span class="env-val" id="env-gain">8.2</span><span class="env-unit">dB</span></span>
+              <div class="env-bar"><div class="env-bar-fill" id="env-gain-bar" style="width:42%"></div></div>
+            </div>
+            <div class="env-card orange">
+              <span class="env-name">AMBIENT LIGHT</span>
+              <span><span class="env-val" id="env-light">485</span><span class="env-unit">lux</span></span>
+              <div class="env-bar"><div class="env-bar-fill" id="env-light-bar" style="width:62%"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- System Performance -->
+      <div class="panel" id="sys-panel">
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+        <div class="panel-head">
+          <div class="panel-title">SYSTEM PERFORMANCE</div>
+          <div class="panel-tag green">STABLE</div>
+        </div>
+        <div class="panel-body">
+          <div class="sys-list">
+            <div class="sys-row">
+              <div class="sys-row-head"><span class="lbl">PROCESSING LATENCY</span><span class="val"><b id="sys-lat">38.2</b> ms</span></div>
+              <div class="ai-bar"><div class="ai-bar-fill green" id="sys-lat-bar" style="width:38%"></div></div>
+            </div>
+            <div class="sys-row">
+              <div class="sys-row-head"><span class="lbl">CPU USAGE</span><span class="val"><b id="sys-cpu">42</b> %</span></div>
+              <div class="ai-bar"><div class="ai-bar-fill cyan" id="sys-cpu-bar" style="width:42%"></div></div>
+            </div>
+            <div class="sys-row">
+              <div class="sys-row-head"><span class="lbl">GPU USAGE</span><span class="val"><b id="sys-gpu">28</b> %</span></div>
+              <div class="ai-bar"><div class="ai-bar-fill" id="sys-gpu-bar" style="width:28%"></div></div>
+            </div>
+            <div class="sys-row">
+              <div class="sys-row-head"><span class="lbl">MEMORY</span><span class="val"><b id="sys-mem">512</b> MB</span></div>
+              <div class="ai-bar"><div class="ai-bar-fill orange" id="sys-mem-bar" style="width:51%"></div></div>
+            </div>
+            <canvas id="sys-canvas" class="sys-mini-chart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Decision & Action Center -->
+      <div class="panel" id="decision-panel">
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+        <div class="panel-head">
+          <div class="panel-title">DECISION &amp; ACTION CENTER</div>
+          <div class="panel-tag green">5 RECS</div>
+        </div>
+        <div class="panel-body">
+          <div class="decision-content">
+            <div class="decision-score">
+              <div class="dq-ring-wrap">
+                <svg viewBox="0 0 36 36">
+                  <circle class="ai-ring-bg" cx="18" cy="18" r="15.9"/>
+                  <circle class="ai-ring-fg" id="dq-ring" cx="18" cy="18" r="15.9"
+                          stroke-dasharray="96, 100"/>
+                </svg>
+                <div class="dq-ring-num"><span id="dq-num">96</span><small>READY</small></div>
+              </div>
+            </div>
+            <div class="decision-rec">
+              <div class="rec-item">
+                <span class="tag">RECOMMEND</span>Continue current acquisition · signal optimal
+              </div>
+              <div class="rec-item info">
+                <span class="tag">CALIBRATE</span>Re-calibrate after 5 min for improved drift estimate
+              </div>
+              <div class="rec-item warn">
+                <span class="tag">ATTENTION</span>Reduce ambient flicker — slight 50 Hz spectral leak
+              </div>
+              <div class="rec-item">
+                <span class="tag">AUTO</span>ROI weights re-balanced toward forehead (+0.07)
+              </div>
+              <div class="rec-item info">
+                <span class="tag">LOG</span>Session ready for export · 26.36 s captured
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────  Trend History (row 4)  ───── -->
+    <div class="panel" id="trend-panel">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+      <div class="panel-head">
+        <div class="panel-title">TREND HISTORY · LAST 60 s</div>
+        <div class="panel-tag">5 STREAMS</div>
+      </div>
+      <div class="panel-body">
+        <div class="trend-content" id="trend-content"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ════════ JAVASCRIPT ════════ -->
 <script>
-// ═══════════════════════════════════════════
-//  CLOCK
-// ═══════════════════════════════════════════
-function updateClock() {
-  document.getElementById('clock').textContent =
-    new Date().toTimeString().slice(0, 8);
+/* ═══════════════════════════════════════════════════════════
+   STATE
+   ═══════════════════════════════════════════════════════════ */
+const STATE = {
+  hr: 72.4, hrv: 45.2, rr: 16.2, spo2: 98, pi: 2.1, lfhf: 1.42,
+  conf: 92, snr: 32.6, motion: 0.08,
+  bvpBuffer: new Array(300).fill(0),
+  history: { hr:[], hrv:[], rr:[], spo2:[], pi:[], lfhf:[] },
+  perfusion: { forehead:0.42, left_cheek:0.62, right_cheek:0.62, nose:0.35, chin:0.18 },
+  bvpPulse: 0,
+  startTime: Date.now(),
+  samples: 0,
+  fps: 0,
+};
+function pushHist(key, v) {
+  STATE.history[key].push(v);
+  if (STATE.history[key].length > 80) STATE.history[key].shift();
 }
-setInterval(updateClock, 1000); updateClock();
+['hr','hrv','rr','spo2','pi','lfhf'].forEach(k => {
+  for (let i = 0; i < 60; i++) pushHist(k, STATE[k] + (Math.random() - 0.5) * (k === 'hr' ? 4 : k === 'spo2' ? 0.4 : k === 'lfhf' ? 0.3 : 3));
+});
 
-// ═══════════════════════════════════════════
-//  SOCKET
-// ═══════════════════════════════════════════
-const socket   = io();
-const statusEl = document.getElementById('status-text');
-socket.on('connect',    () => { statusEl.textContent = 'LIVE'; });
-socket.on('disconnect', () => { statusEl.textContent = 'OFFLINE'; });
+/* ═══════════════════════════════════════════════════════════
+   HEADER CLOCK + UPTIME + DATE
+   ═══════════════════════════════════════════════════════════ */
+function pad(n, w = 2) { return String(n).padStart(w, '0'); }
+function tickHeader() {
+  const d = new Date();
+  document.getElementById('hdr-clock').textContent =
+    pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  document.getElementById('hdr-session').textContent =
+    months[d.getMonth()] + ' ' + pad(d.getDate()) + ' · ' + d.getFullYear();
+  const elapsed = (Date.now() - STATE.startTime) / 1000;
+  const m = Math.floor(elapsed / 60), s = Math.floor(elapsed % 60);
+  document.getElementById('hdr-uptime').textContent = pad(m) + ' : ' + pad(s);
+  document.getElementById('hdr-samples').textContent = STATE.samples.toLocaleString();
+}
+setInterval(tickHeader, 250); tickHeader();
 
-// ═══════════════════════════════════════════
-//  CAMERA FEED + FACE BOX
-// ═══════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════
+   SOCKET.IO
+   ═══════════════════════════════════════════════════════════ */
+const socket = io();
+const hdrLive   = document.getElementById('hdr-live');
+const hdrStatus = document.getElementById('hdr-status');
+socket.on('connect',    () => { hdrLive.textContent = '● LIVE';     hdrLive.classList.add('live'); });
+socket.on('disconnect', () => { hdrLive.textContent = '● OFFLINE';  hdrLive.classList.remove('live'); hdrStatus.textContent = 'OFFLINE'; });
+
+/* ═══════════════════════════════════════════════════════════
+   CAMERA FEED + FACE BOX
+   ═══════════════════════════════════════════════════════════ */
 const camFeed    = document.getElementById('cam-feed');
 const faceCanvas = document.getElementById('face-canvas');
 const faceCtx    = faceCanvas.getContext('2d');
 let frameCount = 0, lastFpsTime = performance.now();
-const fpsEl = document.getElementById('fps-counter');
 
 socket.on('frame', ({ img, box }) => {
   camFeed.src = 'data:image/jpeg;base64,' + img;
   frameCount++;
+  STATE.samples++;
   const now = performance.now();
   if (now - lastFpsTime >= 1000) {
-    fpsEl.textContent = frameCount + ' FPS';
+    STATE.fps = frameCount;
+    document.getElementById('hdr-fps').textContent = frameCount + ' FPS';
+    document.getElementById('env-fps').textContent = frameCount;
+    document.getElementById('env-fps-bar').style.width = Math.min(100, frameCount/60*100) + '%';
     frameCount = 0; lastFpsTime = now;
   }
   faceCanvas.width  = camFeed.offsetWidth;
@@ -355,11 +1504,10 @@ socket.on('frame', ({ img, box }) => {
     const sy = faceCanvas.height / (camFeed.naturalHeight || 480);
     const x1 = box.x1*sx, y1 = box.y1*sy;
     const x2 = box.x2*sx, y2 = box.y2*sy;
-    const cs = 18;
+    const cs = 16;
     faceCtx.strokeStyle = '#00f5a0';
-    faceCtx.lineWidth = 2;
-    faceCtx.shadowColor = '#00f5a0';
-    faceCtx.shadowBlur  = 8;
+    faceCtx.lineWidth = 1.5;
+    faceCtx.shadowColor = '#00f5a0'; faceCtx.shadowBlur = 6;
     [
       [[x1,y1+cs],[x1,y1],[x1+cs,y1]],
       [[x2-cs,y1],[x2,y1],[x2,y1+cs]],
@@ -367,275 +1515,647 @@ socket.on('frame', ({ img, box }) => {
       [[x2-cs,y2],[x2,y2],[x2,y2-cs]],
     ].forEach(pts => {
       faceCtx.beginPath();
-      faceCtx.moveTo(...pts[0]);
-      faceCtx.lineTo(...pts[1]);
-      faceCtx.lineTo(...pts[2]);
+      faceCtx.moveTo(...pts[0]); faceCtx.lineTo(...pts[1]); faceCtx.lineTo(...pts[2]);
       faceCtx.stroke();
     });
+    // Live ROI overlay tags
+    drawRoiTags(x1, y1, x2, y2);
   }
 });
 
-// ═══════════════════════════════════════════
-//  HR DISPLAY
-// ═══════════════════════════════════════════
-const hrValueEl  = document.getElementById('hr-value');
-const hrStatusEl = document.getElementById('hr-status');
-const hrRing     = document.getElementById('hr-ring');
-const heartIcon  = document.getElementById('heart-icon');
-
-function hrZone(hr) {
-  if (hr < 50)  return { label: 'BRADYCARDIA',  cls: 'low' };
-  if (hr < 60)  return { label: 'LOW NORMAL',   cls: 'low' };
-  if (hr < 100) return { label: 'NORMAL SINUS', cls: 'normal' };
-  if (hr < 120) return { label: 'ELEVATED',     cls: 'high' };
-  return               { label: 'TACHYCARDIA',  cls: 'high' };
+function drawRoiTags(x1, y1, x2, y2) {
+  const w = x2 - x1, h = y2 - y1;
+  const tags = [
+    ['FOREHEAD',   x1 + w*0.42, y1 + h*0.10],
+    ['L. CHEEK',   x1 + w*0.18, y1 + h*0.55],
+    ['R. CHEEK',   x1 + w*0.70, y1 + h*0.55],
+    ['CHIN',       x1 + w*0.42, y1 + h*0.92],
+  ];
+  faceCtx.shadowBlur = 0;
+  faceCtx.font = '9px "Share Tech Mono", monospace';
+  faceCtx.fillStyle = '#00f5a0';
+  faceCtx.strokeStyle = '#00f5a050';
+  faceCtx.lineWidth = 0.8;
+  tags.forEach(([t, x, y]) => {
+    faceCtx.beginPath();
+    faceCtx.arc(x, y, 3, 0, Math.PI*2);
+    faceCtx.fillStyle = '#00f5a0';
+    faceCtx.fill();
+    faceCtx.beginPath();
+    faceCtx.moveTo(x, y); faceCtx.lineTo(x + 8, y - 8);
+    faceCtx.strokeStyle = '#00f5a080';
+    faceCtx.stroke();
+    faceCtx.fillStyle = '#00f5a0';
+    faceCtx.fillText(t, x + 10, y - 9);
+  });
 }
 
-// ═══════════════════════════════════════════
-//  BVP → PERFUSION STATE
-//  rPPG literature: cheeks > forehead > nose > chin
-// ═══════════════════════════════════════════
-let perfusion = {
-  forehead:    0.25,
-  left_cheek:  0.18,
-  right_cheek: 0.18,
-  nose:        0.20,
-  chin:        0.10,
-};
-let currentHR  = null;
-let bvpPulse   = 0;   // animates with heartbeat
+/* ═══════════════════════════════════════════════════════════
+   VITALS
+   ═══════════════════════════════════════════════════════════ */
+function hrZone(hr) {
+  if (hr < 50)  return 'BRADYCARDIA';
+  if (hr < 60)  return 'LOW NORMAL';
+  if (hr < 100) return 'NORMAL SINUS';
+  if (hr < 120) return 'ELEVATED';
+  return 'TACHYCARDIA';
+}
 
 socket.on('vitals', ({ hr, bvp }) => {
   if (hr) {
-    currentHR = hr;
-    hrValueEl.textContent = hr.toFixed(1);
-    const zone = hrZone(hr);
-    hrStatusEl.textContent = zone.label;
-    hrStatusEl.className   = 'hr-status ' + zone.cls;
-    hrRing.classList.add('beating');
-    heartIcon.classList.add('beating');
-    const beatDur = (60 / hr).toFixed(2) + 's';
-    heartIcon.style.animationDuration = beatDur;
-    hrRing.style.animationDuration    = beatDur;
+    STATE.hr = hr;
+    document.getElementById('m-hr').textContent = hr.toFixed(1);
+    pushHist('hr', hr);
   }
-
-  if (bvp && bvp.length > 10) {
+  if (bvp && bvp.length > 2) {
+    STATE.bvpBuffer.push(...bvp);
+    STATE.bvpBuffer = STATE.bvpBuffer.slice(-300);
     const recent = bvp.slice(-60);
-    const minV   = Math.min(...recent);
-    const maxV   = Math.max(...recent);
-    const amp    = Math.max(0, Math.min(1, maxV - minV));
-    // Cheeks carry strongest blood-volume pulse signal
-    perfusion.forehead    = 0.28 + amp * 0.42;
-    perfusion.left_cheek  = 0.52 + amp * 0.48;
-    perfusion.right_cheek = 0.52 + amp * 0.48;
-    perfusion.nose        = 0.33 + amp * 0.28;
-    perfusion.chin        = 0.12 + amp * 0.18;
+    const minV = Math.min(...recent), maxV = Math.max(...recent);
+    const amp  = Math.max(0, Math.min(1, maxV - minV));
+    document.getElementById('bvp-amp').textContent = amp.toFixed(2);
+    STATE.perfusion.forehead    = 0.28 + amp * 0.42;
+    STATE.perfusion.left_cheek  = 0.52 + amp * 0.48;
+    STATE.perfusion.right_cheek = 0.52 + amp * 0.48;
+    STATE.perfusion.nose        = 0.33 + amp * 0.28;
+    STATE.perfusion.chin        = 0.12 + amp * 0.18;
   }
-
-  if (bvp && bvp.length > 2) drawOscilloscope(bvp);
 });
 
-// ═══════════════════════════════════════════
-//  BVP OSCILLOSCOPE
-// ═══════════════════════════════════════════
-const bvpCanvas = document.getElementById('bvp-canvas');
-const bvpCtx    = bvpCanvas.getContext('2d');
-let bvpBuffer   = new Array(300).fill(0);
+/* ═══════════════════════════════════════════════════════════
+   SIMULATED EXTRA METRICS — varies smoothly each tick
+   ═══════════════════════════════════════════════════════════ */
+function rand(a, b) { return a + Math.random() * (b - a); }
+function smooth(prev, target, a = 0.12) { return prev + (target - prev) * a; }
 
-function drawOscilloscope(newData) {
-  bvpBuffer.push(...newData);
-  bvpBuffer = bvpBuffer.slice(-300);
-  const W = bvpCanvas.offsetWidth;
-  const H = bvpCanvas.offsetHeight;
-  bvpCanvas.width = W; bvpCanvas.height = H;
-  const mn = Math.min(...bvpBuffer);
-  const mx = Math.max(...bvpBuffer);
-  const range = mx - mn || 1;
-  bvpCtx.clearRect(0, 0, W, H);
-  const g = bvpCtx.createLinearGradient(0,0,W,0);
-  g.addColorStop(0,   'rgba(0,245,160,0)');
-  g.addColorStop(0.6, 'rgba(0,245,160,0.4)');
-  g.addColorStop(1,   'rgba(0,245,160,1)');
-  bvpCtx.lineWidth = 2; bvpCtx.strokeStyle = g;
-  bvpCtx.shadowColor = '#00f5a0'; bvpCtx.shadowBlur = 12;
-  bvpCtx.lineJoin = 'round';
-  bvpCtx.beginPath();
-  bvpBuffer.forEach((v, i) => {
-    const x = (i / (bvpBuffer.length - 1)) * W;
-    const y = H - ((v - mn) / range) * H * 0.85 - H * 0.075;
-    i === 0 ? bvpCtx.moveTo(x, y) : bvpCtx.lineTo(x, y);
+setInterval(() => {
+  // small drift in simulated metrics
+  STATE.hrv  = smooth(STATE.hrv,  rand(38, 52));
+  STATE.rr   = smooth(STATE.rr,   rand(14, 18));
+  STATE.spo2 = smooth(STATE.spo2, rand(96, 99));
+  STATE.pi   = smooth(STATE.pi,   rand(1.6, 2.6));
+  STATE.lfhf = smooth(STATE.lfhf, rand(1.0, 1.8));
+  STATE.snr  = smooth(STATE.snr,  rand(28, 35));
+  STATE.motion = smooth(STATE.motion, rand(0.04, 0.18));
+  STATE.conf = Math.round(smooth(STATE.conf, rand(85, 97)));
+
+  document.getElementById('m-hrv').textContent  = STATE.hrv.toFixed(1);
+  document.getElementById('m-rr').textContent   = STATE.rr.toFixed(1);
+  document.getElementById('m-spo2').textContent = Math.round(STATE.spo2);
+  document.getElementById('m-pi').textContent   = STATE.pi.toFixed(1);
+  document.getElementById('m-lfhf').textContent = STATE.lfhf.toFixed(2);
+
+  pushHist('hrv', STATE.hrv); pushHist('rr', STATE.rr);
+  pushHist('spo2', STATE.spo2); pushHist('pi', STATE.pi);
+  pushHist('lfhf', STATE.lfhf);
+
+  // Quality bars
+  const qSet = (id, val, max, warn=0.6, bad=0.3) => {
+    const el = document.getElementById(id);
+    const pct = Math.max(0, Math.min(100, val/max*100));
+    el.style.width = pct + '%';
+    el.classList.remove('warn','bad');
+    if (pct/100 < bad) el.classList.add('bad');
+    else if (pct/100 < warn) el.classList.add('warn');
+    const v = document.getElementById(id + '-v');
+    if (v) v.textContent = (val > 5 ? val.toFixed(1) : val.toFixed(2));
+  };
+  qSet('q-snr', STATE.snr, 36);
+  // motion: lower better — invert
+  document.getElementById('q-motion').style.width = Math.min(100, STATE.motion * 500) + '%';
+  document.getElementById('q-motion-v').textContent = STATE.motion.toFixed(2);
+  document.getElementById('q-motion').classList.toggle('warn', STATE.motion > 0.15);
+  qSet('q-illum', rand(82, 95), 100);
+  qSet('q-roi',   rand(91, 99), 100);
+  qSet('q-skin',  rand(86, 95), 100);
+  qSet('q-freq',  rand(88, 96), 100);
+  qSet('q-spec',  rand(82, 92), 100);
+
+  document.getElementById('q-overall').textContent = STATE.conf + '%';
+  document.getElementById('hdr-status').textContent =
+    STATE.conf > 90 ? 'EXCELLENT' :
+    STATE.conf > 75 ? 'GOOD' :
+    STATE.conf > 60 ? 'FAIR' : 'POOR';
+
+  // overlay
+  document.getElementById('live-conf').textContent  = STATE.conf + '%';
+  document.getElementById('live-roiq').textContent  = (94 + Math.random()*4).toFixed(0) + '%';
+  document.getElementById('live-motion').textContent = STATE.motion.toFixed(2);
+
+  // AI
+  const aiPct = Math.round(rand(88, 96));
+  document.getElementById('ai-ring').setAttribute('stroke-dasharray', aiPct + ', 100');
+  document.getElementById('ai-ring-num').textContent = aiPct + '%';
+  document.getElementById('ai-drift').textContent = (Math.random()*0.04).toFixed(3);
+
+  // Decision quality
+  const dq = Math.round(rand(92, 99));
+  document.getElementById('dq-ring').setAttribute('stroke-dasharray', dq + ', 100');
+  document.getElementById('dq-num').textContent = dq;
+
+  // Environment / hardware sim
+  const exp = rand(35, 55), gain = rand(6, 12), light = rand(420, 560);
+  document.getElementById('env-exp').textContent  = exp.toFixed(0);
+  document.getElementById('env-exp-bar').style.width = (exp/80*100) + '%';
+  document.getElementById('env-gain').textContent = gain.toFixed(1);
+  document.getElementById('env-gain-bar').style.width = (gain/20*100) + '%';
+  document.getElementById('env-light').textContent = light.toFixed(0);
+  document.getElementById('env-light-bar').style.width = (light/800*100) + '%';
+
+  // System performance sim
+  const lat = rand(28, 52), cpu = rand(35, 55), gpu = rand(22, 38), mem = rand(480, 580);
+  document.getElementById('sys-lat').textContent = lat.toFixed(1);
+  document.getElementById('sys-lat-bar').style.width = Math.min(100, lat) + '%';
+  document.getElementById('sys-cpu').textContent = cpu.toFixed(0);
+  document.getElementById('sys-cpu-bar').style.width = cpu + '%';
+  document.getElementById('sys-gpu').textContent = gpu.toFixed(0);
+  document.getElementById('sys-gpu-bar').style.width = gpu + '%';
+  document.getElementById('sys-mem').textContent = mem.toFixed(0);
+  document.getElementById('sys-mem-bar').style.width = (mem/1024*100) + '%';
+
+  // FFT peak / IBI
+  const peakHz = STATE.hr / 60;
+  document.getElementById('fft-peak').textContent = peakHz.toFixed(2) + ' Hz';
+  document.getElementById('peak-ibi').textContent = Math.round(60000 / STATE.hr) + ' ms';
+
+  // network latency simulation
+  document.getElementById('hdr-net').textContent = 'NET ' + Math.round(rand(8, 24)) + ' ms';
+}, 1000);
+
+/* ═══════════════════════════════════════════════════════════
+   SPARKLINE DRAWING (small metric cards)
+   ═══════════════════════════════════════════════════════════ */
+function drawSpark(canvas, data, color) {
+  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+  if (!W || !H) return;
+  canvas.width = W * window.devicePixelRatio;
+  canvas.height = H * window.devicePixelRatio;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  ctx.clearRect(0, 0, W, H);
+  if (!data || data.length < 2) return;
+  const mn = Math.min(...data), mx = Math.max(...data), rng = mx - mn || 1;
+  // Filled gradient
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, color + '60');
+  grad.addColorStop(1, color + '00');
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i / (data.length - 1) * W;
+    const y = H - ((v - mn) / rng) * H * 0.85 - H * 0.1;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  bvpCtx.stroke();
-  const lastY = H - ((bvpBuffer.at(-1) - mn) / range) * H * 0.85 - H * 0.075;
-  bvpCtx.beginPath();
-  bvpCtx.arc(W-2, lastY, 4, 0, Math.PI*2);
-  bvpCtx.fillStyle = '#00f5a0'; bvpCtx.shadowBlur = 20; bvpCtx.fill();
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+  // Line
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i / (data.length - 1) * W;
+    const y = H - ((v - mn) / rng) * H * 0.85 - H * 0.1;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = color; ctx.lineWidth = 1.2;
+  ctx.shadowColor = color; ctx.shadowBlur = 6;
+  ctx.stroke();
 }
 
-// ═══════════════════════════════════════════
-//  FACIAL PERFUSION MAP
-// ═══════════════════════════════════════════
+const SPARK_COLORS = {
+  hr: '#00f5a0', hrv: '#b66dff', rr: '#00d9ff',
+  spo2: '#ff9d3b', pi: '#ff5dc8', lfhf: '#4a9eff',
+};
 
-// Jet colormap  0=blue → 0.5=green → 1=red
+/* ═══════════════════════════════════════════════════════════
+   WAVEFORM CELLS — BVP / FFT / PEAK / FILTER
+   ═══════════════════════════════════════════════════════════ */
+function setupCanvas(c) {
+  const W = c.offsetWidth, H = c.offsetHeight;
+  c.width = W * window.devicePixelRatio;
+  c.height = H * window.devicePixelRatio;
+  const ctx = c.getContext('2d');
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  ctx.clearRect(0, 0, W, H);
+  return { ctx, W, H };
+}
+
+function drawBVP() {
+  const { ctx, W, H } = setupCanvas(document.getElementById('wave-bvp'));
+  const data = STATE.bvpBuffer;
+  const mn = Math.min(...data), mx = Math.max(...data), rng = mx - mn || 1;
+  const g = ctx.createLinearGradient(0, 0, W, 0);
+  g.addColorStop(0, 'rgba(0,245,160,0)');
+  g.addColorStop(0.5, 'rgba(0,245,160,0.6)');
+  g.addColorStop(1, '#00f5a0');
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i / (data.length - 1) * W;
+    const y = H - ((v - mn) / rng) * H * 0.78 - H * 0.11;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = g; ctx.lineWidth = 1.5;
+  ctx.shadowColor = '#00f5a0'; ctx.shadowBlur = 10;
+  ctx.stroke();
+  // dot
+  const lastY = H - ((data.at(-1) - mn) / rng) * H * 0.78 - H * 0.11;
+  ctx.beginPath(); ctx.arc(W - 3, lastY, 3, 0, Math.PI*2);
+  ctx.fillStyle = '#00f5a0'; ctx.shadowBlur = 14; ctx.fill();
+}
+
+function drawFFT() {
+  const { ctx, W, H } = setupCanvas(document.getElementById('wave-fft'));
+  const N = 64;
+  const peakHz = STATE.hr / 60;
+  ctx.shadowColor = '#00d9ff'; ctx.shadowBlur = 6;
+  for (let i = 0; i < N; i++) {
+    const f = (i / N) * 5; // 0–5 Hz
+    let amp = Math.exp(-Math.pow((f - peakHz) / 0.18, 2)) * 0.85;
+    amp += Math.exp(-Math.pow((f - peakHz*2) / 0.25, 2)) * 0.35;
+    amp += Math.random() * 0.06;
+    const bw = W / N - 1.4;
+    const bh = amp * H * 0.88;
+    const x = i * (W / N) + 0.7;
+    const y = H - bh;
+    const grad = ctx.createLinearGradient(0, y, 0, H);
+    grad.addColorStop(0, '#00d9ff');
+    grad.addColorStop(1, '#00d9ff20');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, y, bw, bh);
+  }
+  // peak marker
+  const px = (peakHz / 5) * W;
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = '#ff5dc8'; ctx.lineWidth = 1;
+  ctx.setLineDash([2, 3]);
+  ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawPeak() {
+  const { ctx, W, H } = setupCanvas(document.getElementById('wave-peak'));
+  const data = STATE.bvpBuffer.slice(-180);
+  if (data.length < 4) return;
+  const mn = Math.min(...data), mx = Math.max(...data), rng = mx - mn || 1;
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i / (data.length - 1) * W;
+    const y = H - ((v - mn) / rng) * H * 0.78 - H * 0.11;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#b66dff'; ctx.lineWidth = 1.3;
+  ctx.shadowColor = '#b66dff'; ctx.shadowBlur = 6;
+  ctx.stroke();
+  // Mark peaks (local maxima)
+  ctx.shadowBlur = 0;
+  for (let i = 2; i < data.length - 2; i++) {
+    if (data[i] > data[i-1] && data[i] > data[i-2] &&
+        data[i] > data[i+1] && data[i] > data[i+2] &&
+        data[i] > mn + rng * 0.55) {
+      const x = i / (data.length - 1) * W;
+      const y = H - ((data[i] - mn) / rng) * H * 0.78 - H * 0.11;
+      ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI*2);
+      ctx.fillStyle = '#ff5dc8';
+      ctx.shadowColor = '#ff5dc8'; ctx.shadowBlur = 8;
+      ctx.fill();
+    }
+  }
+}
+
+function drawFilter() {
+  const { ctx, W, H } = setupCanvas(document.getElementById('wave-filter'));
+  // Two stacked traces: raw vs filtered
+  const data = STATE.bvpBuffer.slice(-220);
+  if (data.length < 4) return;
+  const mn = Math.min(...data), mx = Math.max(...data), rng = mx - mn || 1;
+  // Raw (with noise)
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const noise = (Math.random() - 0.5) * rng * 0.18;
+    const x = i / (data.length - 1) * W;
+    const y = H * 0.28 - ((v + noise - mn) / rng) * H * 0.22 + H * 0.11;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#ff9d3b80'; ctx.lineWidth = 1;
+  ctx.stroke();
+  // Filtered (smooth)
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i / (data.length - 1) * W;
+    const y = H * 0.78 - ((v - mn) / rng) * H * 0.30 + H * 0.05;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#00f5a0'; ctx.lineWidth = 1.4;
+  ctx.shadowColor = '#00f5a0'; ctx.shadowBlur = 6;
+  ctx.stroke();
+  // labels
+  ctx.shadowBlur = 0;
+  ctx.font = '8px "Share Tech Mono", monospace';
+  ctx.fillStyle = '#ff9d3b'; ctx.fillText('RAW',      4, H * 0.18);
+  ctx.fillStyle = '#00f5a0'; ctx.fillText('FILTERED', 4, H * 0.55);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ATTENTION MAP CANVAS — small heatmap-like grid
+   ═══════════════════════════════════════════════════════════ */
+function drawAttn() {
+  const c = document.getElementById('attn-canvas');
+  const { ctx, W, H } = setupCanvas(c);
+  const cols = 12, rows = 5;
+  const cw = W / cols, ch = H / rows;
+  for (let r = 0; r < rows; r++) {
+    for (let i = 0; i < cols; i++) {
+      // Centered hot region
+      const dx = (i - cols/2) / (cols/2), dy = (r - rows/2) / (rows/2);
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const heat = Math.max(0, Math.min(1, 1 - dist + Math.random() * 0.3 - 0.1));
+      ctx.fillStyle = jet(heat) + 'cc';
+      ctx.fillRect(i*cw, r*ch, cw - 0.5, ch - 0.5);
+    }
+  }
+}
 function jet(t) {
   t = Math.max(0, Math.min(1, t));
   const r = Math.min(1, Math.max(0, 1.5 - Math.abs(4*t - 3)));
   const g = Math.min(1, Math.max(0, 1.5 - Math.abs(4*t - 2)));
   const b = Math.min(1, Math.max(0, 1.5 - Math.abs(4*t - 1)));
-  return [Math.round(r*255), Math.round(g*255), Math.round(b*255)];
+  return '#' + [r, g, b].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
 }
 
-// Classify normalised face coord (nx,ny ∈ [0,1]) → perfusion intensity
-function regionIntensity(nx, ny) {
-  if (ny < 0.28)                        return perfusion.forehead;
-  if (ny < 0.58 && nx > 0.32 && nx < 0.68) return perfusion.nose;
-  if (ny < 0.72 && nx <= 0.46)         return perfusion.left_cheek;
-  if (ny < 0.72 && nx >= 0.54)         return perfusion.right_cheek;
-  return perfusion.chin;
-}
-
-const meshCanvas = document.getElementById('mesh-canvas');
-const meshCtx    = meshCanvas.getContext('2d');
-const meshStatus = document.getElementById('mesh-status');
-let   landmarkBuf = null;
-let   meshReady   = false;
-
-// Animate the heat map at 30fps (pulse brightness synced to HR)
-function animatePerfusion() {
-  if (currentHR) {
-    bvpPulse = (Math.sin(Date.now() / 1000 * currentHR / 60 * Math.PI * 2) + 1) / 2 * 0.10;
-  }
-  if (landmarkBuf) drawPerfusion(landmarkBuf);
-  requestAnimationFrame(animatePerfusion);
-}
-animatePerfusion();
-
-function drawPerfusion(landmarks) {
-  const W = meshCanvas.offsetWidth;
-  const H = meshCanvas.offsetHeight;
-  meshCanvas.width = W; meshCanvas.height = H;
-
-  // Face bounding box
-  let minX = 1, maxX = 0, minY = 1, maxY = 0;
-  landmarks.forEach(lm => {
-    minX = Math.min(minX, lm.x); maxX = Math.max(maxX, lm.x);
-    minY = Math.min(minY, lm.y); maxY = Math.max(maxY, lm.y);
+/* ═══════════════════════════════════════════════════════════
+   DRIFT MINI CHART
+   ═══════════════════════════════════════════════════════════ */
+const DRIFT_BUF = [];
+function drawDrift() {
+  DRIFT_BUF.push(Math.random() * 0.04);
+  if (DRIFT_BUF.length > 50) DRIFT_BUF.shift();
+  const c = document.getElementById('drift-canvas');
+  const { ctx, W, H } = setupCanvas(c);
+  if (DRIFT_BUF.length < 2) return;
+  const mn = 0, mx = 0.05;
+  ctx.beginPath();
+  DRIFT_BUF.forEach((v, i) => {
+    const x = i / (DRIFT_BUF.length - 1) * W;
+    const y = H - ((v - mn) / (mx - mn)) * H * 0.8 - H * 0.1;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  const fW = maxX - minX || 1;
-  const fH = maxY - minY || 1;
+  ctx.strokeStyle = '#ff9d3b'; ctx.lineWidth = 1;
+  ctx.shadowColor = '#ff9d3b'; ctx.shadowBlur = 4;
+  ctx.stroke();
+}
 
-  // Drawing area with padding
-  const pad = 0.08;
-  const dW = W * (1 - pad*2);
-  const dH = H * (1 - pad*2);
-  const oX = W * pad;
-  const oY = H * pad;
-
-  const toX = lm => ((lm.x - minX) / fW) * dW + oX;
-  const toY = lm => ((lm.y - minY) / fH) * dH + oY;
-
-  // ── 1. Smooth heat-map blobs ──────────────────────
-  const blobR = Math.max(W, H) * 0.055;
-  landmarks.forEach(lm => {
-    const px = toX(lm), py = toY(lm);
-    const nx = (lm.x - minX) / fW;
-    const ny = (lm.y - minY) / fH;
-    const intensity = Math.min(1, regionIntensity(nx, ny) + bvpPulse);
-    const [r, g, b] = jet(intensity);
-
-    const grad = meshCtx.createRadialGradient(px, py, 0, px, py, blobR);
-    grad.addColorStop(0,   `rgba(${r},${g},${b},0.55)`);
-    grad.addColorStop(0.5, `rgba(${r},${g},${b},0.18)`);
-    grad.addColorStop(1,   `rgba(${r},${g},${b},0)`);
-    meshCtx.beginPath();
-    meshCtx.arc(px, py, blobR, 0, Math.PI*2);
-    meshCtx.fillStyle = grad;
-    meshCtx.fill();
-  });
-
-  // ── 2. Wireframe tessellation overlay ─────────────
-  if (window.FACEMESH_TESSELATION && FACEMESH_TESSELATION.length) {
-    meshCtx.save();
-    meshCtx.globalAlpha = 0.18;
-    meshCtx.strokeStyle = '#cde0f5';
-    meshCtx.lineWidth   = 0.4;
-    meshCtx.beginPath();
-    FACEMESH_TESSELATION.forEach(([i, j]) => {
-      const a = landmarks[i], b = landmarks[j];
-      if (!a || !b) return;
-      meshCtx.moveTo(toX(a), toY(a));
-      meshCtx.lineTo(toX(b), toY(b));
+/* ═══════════════════════════════════════════════════════════
+   SYSTEM MINI CHART
+   ═══════════════════════════════════════════════════════════ */
+const SYS_BUF = { lat: [], cpu: [] };
+function drawSysMini() {
+  SYS_BUF.lat.push(parseFloat(document.getElementById('sys-lat').textContent) || 35);
+  SYS_BUF.cpu.push(parseFloat(document.getElementById('sys-cpu').textContent) || 40);
+  if (SYS_BUF.lat.length > 60) { SYS_BUF.lat.shift(); SYS_BUF.cpu.shift(); }
+  const c = document.getElementById('sys-canvas');
+  const { ctx, W, H } = setupCanvas(c);
+  const drawLine = (data, mn, mx, color) => {
+    ctx.beginPath();
+    data.forEach((v, i) => {
+      const x = i / (data.length - 1) * W;
+      const y = H - ((v - mn) / (mx - mn)) * H * 0.8 - H * 0.1;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
-    meshCtx.stroke();
-    meshCtx.restore();
-  }
-
-  // ── 3. Landmark dots ──────────────────────────────
-  meshCtx.save();
-  meshCtx.globalAlpha = 0.3;
-  landmarks.forEach(lm => {
-    const px = toX(lm), py = toY(lm);
-    const nx = (lm.x-minX)/fW, ny = (lm.y-minY)/fH;
-    const [r,g,b] = jet(Math.min(1, regionIntensity(nx,ny)+bvpPulse));
-    meshCtx.beginPath();
-    meshCtx.arc(px, py, 1.3, 0, Math.PI*2);
-    meshCtx.fillStyle = `rgb(${r},${g},${b})`;
-    meshCtx.fill();
-  });
-  meshCtx.restore();
+    ctx.strokeStyle = color; ctx.lineWidth = 1;
+    ctx.shadowColor = color; ctx.shadowBlur = 4; ctx.stroke();
+  };
+  drawLine(SYS_BUF.lat, 0, 100, '#00f5a0');
+  drawLine(SYS_BUF.cpu, 0, 100, '#00d9ff');
 }
 
-// ── MediaPipe FaceMesh initialisation ────────
-function initFaceMesh() {
-  if (typeof FaceMesh === 'undefined') {
-    meshStatus.textContent = 'MEDIAPIPE NOT LOADED';
+/* ═══════════════════════════════════════════════════════════
+   ROI HEATMAP CANVAS
+   ═══════════════════════════════════════════════════════════ */
+const roiCanvas = document.getElementById('roi-canvas');
+const roiCtx    = roiCanvas.getContext('2d');
+let roiLandmarks = null;
+let roiReady = false;
+
+function drawRoiHeat() {
+  const W = roiCanvas.offsetWidth, H = roiCanvas.offsetHeight;
+  if (!W || !H) return;
+  roiCanvas.width = W * window.devicePixelRatio;
+  roiCanvas.height = H * window.devicePixelRatio;
+  roiCtx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+  roiCtx.clearRect(0, 0, W, H);
+
+  if (!roiLandmarks) {
+    // Idle state — animated default heatmap blobs at face anatomical positions
+    const t = Date.now() / 1000;
+    const pulse = (Math.sin(t * STATE.hr / 60 * Math.PI * 2) + 1) / 2 * 0.15;
+    const blobs = [
+      // [nx, ny, intensity]
+      [0.50, 0.20, STATE.perfusion.forehead],
+      [0.30, 0.50, STATE.perfusion.left_cheek],
+      [0.70, 0.50, STATE.perfusion.right_cheek],
+      [0.50, 0.45, STATE.perfusion.nose],
+      [0.50, 0.78, STATE.perfusion.chin],
+    ];
+    // Face silhouette outline
+    roiCtx.save();
+    roiCtx.strokeStyle = 'rgba(120,160,210,0.18)';
+    roiCtx.lineWidth = 1;
+    roiCtx.beginPath();
+    roiCtx.ellipse(W*0.5, H*0.5, W*0.32, H*0.40, 0, 0, Math.PI*2);
+    roiCtx.stroke();
+    roiCtx.restore();
+    blobs.forEach(([nx, ny, val]) => {
+      const x = nx * W, y = ny * H;
+      const r = Math.min(W, H) * 0.18;
+      const heat = Math.min(1, val + pulse);
+      const c1 = jet(heat) + 'aa';
+      const c2 = jet(heat) + '00';
+      const grad = roiCtx.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, c1);
+      grad.addColorStop(1, c2);
+      roiCtx.fillStyle = grad;
+      roiCtx.beginPath(); roiCtx.arc(x, y, r, 0, Math.PI*2); roiCtx.fill();
+    });
     return;
   }
 
+  // Real face mesh data path
+  let minX = 1, maxX = 0, minY = 1, maxY = 0;
+  roiLandmarks.forEach(lm => {
+    minX = Math.min(minX, lm.x); maxX = Math.max(maxX, lm.x);
+    minY = Math.min(minY, lm.y); maxY = Math.max(maxY, lm.y);
+  });
+  const fW = maxX - minX || 1, fH = maxY - minY || 1;
+  const pad = 0.08;
+  const dW = W * (1 - pad*2), dH = H * (1 - pad*2);
+  const oX = W * pad,         oY = H * pad;
+  const toX = lm => ((lm.x - minX) / fW) * dW + oX;
+  const toY = lm => ((lm.y - minY) / fH) * dH + oY;
+  const t = Date.now() / 1000;
+  const pulse = STATE.hr ? (Math.sin(t * STATE.hr / 60 * Math.PI * 2) + 1) / 2 * 0.12 : 0;
+  const reg = (nx, ny) => {
+    if (ny < 0.28) return STATE.perfusion.forehead;
+    if (ny < 0.58 && nx > 0.32 && nx < 0.68) return STATE.perfusion.nose;
+    if (ny < 0.72 && nx <= 0.46) return STATE.perfusion.left_cheek;
+    if (ny < 0.72 && nx >= 0.54) return STATE.perfusion.right_cheek;
+    return STATE.perfusion.chin;
+  };
+  const blobR = Math.max(W, H) * 0.05;
+  roiLandmarks.forEach(lm => {
+    const px = toX(lm), py = toY(lm);
+    const nx = (lm.x - minX) / fW, ny = (lm.y - minY) / fH;
+    const heat = Math.min(1, reg(nx, ny) + pulse);
+    const c1 = jet(heat) + '88', c2 = jet(heat) + '00';
+    const grad = roiCtx.createRadialGradient(px, py, 0, px, py, blobR);
+    grad.addColorStop(0, c1); grad.addColorStop(1, c2);
+    roiCtx.fillStyle = grad;
+    roiCtx.beginPath(); roiCtx.arc(px, py, blobR, 0, Math.PI*2); roiCtx.fill();
+  });
+  // wireframe
+  if (window.FACEMESH_TESSELATION) {
+    roiCtx.save();
+    roiCtx.globalAlpha = 0.18;
+    roiCtx.strokeStyle = '#cde0f5';
+    roiCtx.lineWidth = 0.4;
+    roiCtx.beginPath();
+    FACEMESH_TESSELATION.forEach(([i, j]) => {
+      const a = roiLandmarks[i], b = roiLandmarks[j];
+      if (!a || !b) return;
+      roiCtx.moveTo(toX(a), toY(a));
+      roiCtx.lineTo(toX(b), toY(b));
+    });
+    roiCtx.stroke();
+    roiCtx.restore();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LIVE FACE-MESH OVERLAY (drawn on the live video panel)
+   ═══════════════════════════════════════════════════════════ */
+const liveMeshCanvas = document.getElementById('live-mesh-canvas');
+const liveMeshCtx    = liveMeshCanvas.getContext('2d');
+function drawLiveMesh() {
+  const W = liveMeshCanvas.offsetWidth, H = liveMeshCanvas.offsetHeight;
+  liveMeshCanvas.width = W * window.devicePixelRatio;
+  liveMeshCanvas.height = H * window.devicePixelRatio;
+  liveMeshCtx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+  liveMeshCtx.clearRect(0, 0, W, H);
+  if (!roiLandmarks || !window.FACEMESH_TESSELATION) return;
+  liveMeshCtx.strokeStyle = 'rgba(0,245,160,0.35)';
+  liveMeshCtx.lineWidth = 0.4;
+  liveMeshCtx.beginPath();
+  FACEMESH_TESSELATION.forEach(([i, j]) => {
+    const a = roiLandmarks[i], b = roiLandmarks[j];
+    if (!a || !b) return;
+    liveMeshCtx.moveTo(a.x * W, a.y * H);
+    liveMeshCtx.lineTo(b.x * W, b.y * H);
+  });
+  liveMeshCtx.stroke();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TREND CARDS (trend history strip)
+   ═══════════════════════════════════════════════════════════ */
+function buildTrend() {
+  const trendData = [
+    { key: 'hr',   title: 'HR',        unit: 'bpm',   cls: '',        color: '#00f5a0' },
+    { key: 'hrv',  title: 'HRV',       unit: 'ms',    cls: 'purple',  color: '#b66dff' },
+    { key: 'rr',   title: 'RESP RATE', unit: '/min',  cls: 'cyan',    color: '#00d9ff' },
+    { key: 'spo2', title: 'SpO₂',      unit: '%',     cls: 'orange',  color: '#ff9d3b' },
+    { key: 'pi',   title: 'PERF IDX',  unit: '%',     cls: 'magenta', color: '#ff5dc8' },
+  ];
+  const container = document.getElementById('trend-content');
+  container.innerHTML = '';
+  trendData.forEach(d => {
+    const card = document.createElement('div');
+    card.className = 'trend-card ' + d.cls;
+    card.innerHTML = `
+      <div class="trend-card-head">
+        <span>${d.title}</span>
+        <b id="trend-${d.key}-v">--</b>
+      </div>
+      <canvas id="trend-${d.key}-c"></canvas>
+    `;
+    container.appendChild(card);
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN ANIMATION LOOP
+   ═══════════════════════════════════════════════════════════ */
+function tick() {
+  // Cardiac pulse modulator
+  const t = Date.now() / 1000;
+  if (STATE.hr) {
+    STATE.bvpPulse = (Math.sin(t * STATE.hr / 60 * Math.PI * 2) + 1) / 2 * 0.10;
+    // synthesize a BVP sample if no live data
+    if (!socket.connected || STATE.bvpBuffer.every(v => v === 0)) {
+      const synth = Math.sin(t * STATE.hr / 60 * Math.PI * 2) +
+                    Math.sin(t * STATE.hr / 60 * Math.PI * 4) * 0.3 +
+                    (Math.random() - 0.5) * 0.15;
+      STATE.bvpBuffer.push(synth);
+      STATE.bvpBuffer = STATE.bvpBuffer.slice(-300);
+    }
+  }
+
+  // Sparklines
+  document.querySelectorAll('.metric-spark').forEach(c => {
+    const k = c.dataset.key;
+    drawSpark(c, STATE.history[k], SPARK_COLORS[k]);
+  });
+
+  // Waveform charts
+  drawBVP(); drawFFT(); drawPeak(); drawFilter();
+  drawAttn(); drawDrift(); drawSysMini();
+  drawRoiHeat();
+  drawLiveMesh();
+
+  // Trend cards
+  ['hr','hrv','rr','spo2','pi'].forEach(k => {
+    const c = document.getElementById('trend-' + k + '-c');
+    if (c) drawSpark(c, STATE.history[k], SPARK_COLORS[k]);
+    const vEl = document.getElementById('trend-' + k + '-v');
+    if (vEl) vEl.textContent = (k === 'spo2') ? Math.round(STATE[k]) : STATE[k].toFixed(1);
+  });
+
+  requestAnimationFrame(tick);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MEDIAPIPE FACE MESH
+   ═══════════════════════════════════════════════════════════ */
+function initFaceMesh() {
+  if (typeof FaceMesh === 'undefined') return;
   const faceMesh = new FaceMesh({
-    locateFile: f =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${f}`
+    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${f}`
   });
-
   faceMesh.setOptions({
-    maxNumFaces: 1,
-    refineLandmarks: false,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5,
+    maxNumFaces: 1, refineLandmarks: false,
+    minDetectionConfidence: 0.5, minTrackingConfidence: 0.5,
   });
-
   faceMesh.onResults(results => {
     if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-      landmarkBuf = results.multiFaceLandmarks[0];
-      if (!meshReady) {
-        meshReady = true;
-        meshStatus.style.display = 'none';
-      }
+      roiLandmarks = results.multiFaceLandmarks[0];
+      roiReady = true;
+      document.getElementById('live-face').textContent = 'LOCKED';
     } else {
-      landmarkBuf = null;
-      meshStatus.style.display  = 'block';
-      meshStatus.textContent    = 'NO FACE DETECTED';
-      meshCanvas.width  = meshCanvas.offsetWidth;
-      meshCanvas.height = meshCanvas.offsetHeight;
-      meshCtx.clearRect(0, 0, meshCanvas.width, meshCanvas.height);
+      roiLandmarks = null;
+      document.getElementById('live-face').textContent = 'SEARCH';
     }
   });
-
   const mpVideo = document.getElementById('mp-video');
   const cam = new Camera(mpVideo, {
     onFrame: async () => { await faceMesh.send({ image: mpVideo }); },
     width: 640, height: 480,
   });
-
-  cam.start()
-    .then(() => { meshStatus.textContent = 'DETECTING FACE...'; })
-    .catch(err => {
-      meshStatus.textContent = 'CAM ERROR';
-      console.error(err);
-    });
+  cam.start().catch(() => {});
 }
 
-window.addEventListener('load', () => { setTimeout(initFaceMesh, 800); });
+/* ═══════════════════════════════════════════════════════════
+   INIT
+   ═══════════════════════════════════════════════════════════ */
+window.addEventListener('load', () => {
+  buildTrend();
+  setTimeout(initFaceMesh, 800);
+  tick();
+});
 </script>
 </body>
 </html>
