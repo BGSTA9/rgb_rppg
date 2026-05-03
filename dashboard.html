@@ -644,25 +644,12 @@ function perfColor(t) {
 }
 
 // ═══════════════════════════════════════════
-//  ANIMATION — pulse only when confident
-//  (prevents fake heartbeat from hallucinated HR)
+//  ANIMATION VARIABLES
 // ═══════════════════════════════════════════
 let landmarks = null;
 let meshFPSCount = 0, meshFPSTime = performance.now();
+// animate() is defined at the bottom of the file
 
-function animate() {
-  if (currentHR && currentQuality >= Q_GOOD) {
-    bvpPulse = (Math.sin(Date.now() / 1000 * currentHR / 60 * Math.PI * 2) + 1) / 2 * 0.12;
-  } else {
-    bvpPulse = 0;
-  }
-  if (landmarks) {
-    drawVideoOverlay(landmarks);
-    drawFaceMesh(landmarks);
-  }
-  requestAnimationFrame(animate);
-}
-animate();
 
 // ═══════════════════════════════════════════
 //  VIDEO OVERLAY — ROI brackets on the actual face
@@ -861,83 +848,150 @@ function drawFaceMesh(lms) {
 }
 
 // ═══════════════════════════════════════════
-//  MEDIAPIPE INIT
+//  BACKEND CAMERA STREAM + MEDIAPIPE MESH
+//  Camera is owned by the backend (open-rppg).
+//  Frames arrive as base64 JPEG via socket.
+//  We display them and run FaceMesh for visualization.
 // ═══════════════════════════════════════════
-function initFaceMesh() {
-  if (typeof FaceMesh === 'undefined') {
-    videoStatus.textContent = 'MEDIAPIPE UNAVAILABLE';
-    return;
-  }
+const frameImg = new Image();
+let faceMeshInstance = null;
+let backendFaceBox = null;
+let frameW = 640, frameH = 480;
 
-  const faceMesh = new FaceMesh({
+// Offscreen canvas to draw received frames into the video area
+const recvCanvas = document.createElement('canvas');
+const recvCtx = recvCanvas.getContext('2d');
+
+function initFaceMesh() {
+  if (typeof FaceMesh === 'undefined') return;
+  faceMeshInstance = new FaceMesh({
     locateFile: f =>
       `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${f}`
   });
-  faceMesh.setOptions({
+  faceMeshInstance.setOptions({
     maxNumFaces: 1,
     refineLandmarks: false,
     minDetectionConfidence: 0.5,
     minTrackingConfidence: 0.5,
   });
-
-  // Backend frame capture (the visible video element is also our source)
-  const captureCanvas = document.createElement('canvas');
-  captureCanvas.width  = 640;
-  captureCanvas.height = 480;
-  const captureCtx = captureCanvas.getContext('2d');
-  let lastFrameSent = 0;
-
-  function sendBackendFrame(hasFace) {
-    const now = performance.now();
-    if (now - lastFrameSent < 33) return;
-    lastFrameSent = now;
-    const ts = Date.now() / 1000;
-    if (!hasFace) { socket.emit('no_face', { ts }); return; }
-    if (videoEl.readyState < 2) return;
-    captureCtx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
-    captureCanvas.toBlob(blob => {
-      if (!blob) return;
-      blob.arrayBuffer().then(buf => socket.emit('face_frame', { img: buf, ts }));
-    }, 'image/jpeg', 0.92);
-  }
-
-  faceMesh.onResults(results => {
+  faceMeshInstance.onResults(results => {
     const hasFace = !!(results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0);
     if (hasFace) {
       landmarks = results.multiFaceLandmarks[0];
       if (!meshReady) {
         meshReady = true;
-        videoStatus.style.display = 'none';
-        meshStatus.style.display  = 'none';
+        meshStatus.style.display = 'none';
       }
     } else {
       landmarks = null;
-      videoStatus.style.display = 'block';
-      videoStatus.textContent   = 'NO FACE DETECTED';
-      meshStatus.style.display  = 'block';
-      meshStatus.textContent    = 'NO FACE';
+      meshStatus.style.display = 'block';
+      meshStatus.textContent   = 'NO FACE';
       const a = sizeCanvas(meshCanvas, meshCtx);
       meshCtx.clearRect(0, 0, a.W, a.H);
-      const b = sizeCanvas(videoOverlay, videoOvCtx);
-      videoOvCtx.clearRect(0, 0, b.W, b.H);
     }
-    sendBackendFrame(hasFace);
   });
-
-  const cam = new Camera(videoEl, {
-    onFrame: async () => { await faceMesh.send({ image: videoEl }); },
-    width: 1280, height: 720,
-  });
-
-  cam.start()
-    .then(()  => { videoStatus.textContent = 'DETECTING FACE...'; })
-    .catch(err => {
-      videoStatus.textContent = 'CAMERA ERROR · CHECK PERMISSIONS';
-      console.error('MediaPipe camera error:', err);
-    });
 }
 
-window.addEventListener('load', () => { setTimeout(initFaceMesh, 800); });
+// Receive frames streamed from backend
+let meshThrottle = 0;
+socket.on('camera_frame', (data) => {
+  const { img, box, w, h } = data;
+  if (!img) return;
+  frameW = w || 640;
+  frameH = h || 480;
+  backendFaceBox = box; // {x1,y1,x2,y2} or null
+
+  frameImg.onload = () => {
+    // Draw into the video panel via the overlay canvas
+    // (we hide the <video> element and paint on overlay instead)
+    videoStatus.style.display = 'none';
+
+    // Feed to FaceMesh for mesh visualization (throttled)
+    meshThrottle++;
+    if (faceMeshInstance && meshThrottle % 3 === 0) {
+      recvCanvas.width = frameImg.naturalWidth;
+      recvCanvas.height = frameImg.naturalHeight;
+      recvCtx.drawImage(frameImg, 0, 0);
+      faceMeshInstance.send({ image: recvCanvas }).catch(() => {});
+    }
+  };
+  frameImg.src = 'data:image/jpeg;base64,' + img;
+});
+
+// Draw received frame onto the video overlay canvas
+const origDrawVideoOverlay = typeof drawVideoOverlay === 'function' ? drawVideoOverlay : null;
+function drawReceivedFrame() {
+  if (!frameImg.complete || !frameImg.naturalWidth) return;
+  const { W, H } = sizeCanvas(videoOverlay, videoOvCtx);
+  videoOvCtx.clearRect(0, 0, W, H);
+
+  // Draw the camera image (mirrored for selfie view)
+  videoOvCtx.save();
+  videoOvCtx.translate(W, 0);
+  videoOvCtx.scale(-1, 1);
+  const scale = Math.max(W / frameW, H / frameH);
+  const rW = frameW * scale, rH = frameH * scale;
+  const oX = (W - rW) / 2, oY = (H - rH) / 2;
+  videoOvCtx.drawImage(frameImg, oX, oY, rW, rH);
+  videoOvCtx.restore();
+
+  // Draw face bounding box from backend
+  if (backendFaceBox) {
+    const toX = nx => (W - (nx / frameW) * W); // mirror
+    const toY = ny => (ny / frameH) * H;
+    const x1 = toX(backendFaceBox.x2);
+    const y1 = toY(backendFaceBox.y1);
+    const x2 = toX(backendFaceBox.x1);
+    const y2 = toY(backendFaceBox.y2);
+    const bw = x2 - x1, bh = y2 - y1;
+    if (bw > 0 && bh > 0) {
+      const intensity = Math.min(1, perfusion.forehead + bvpPulse);
+      const [r, g, b] = perfColor(intensity);
+      videoOvCtx.save();
+      videoOvCtx.strokeStyle = `rgba(${r},${g},${b},0.95)`;
+      videoOvCtx.lineWidth = 2;
+      videoOvCtx.shadowColor = `rgb(${r},${g},${b})`;
+      videoOvCtx.shadowBlur = 10;
+      const brk = Math.max(8, Math.min(20, bw * 0.12, bh * 0.12));
+      videoOvCtx.beginPath();
+      videoOvCtx.moveTo(x1, y1+brk); videoOvCtx.lineTo(x1, y1); videoOvCtx.lineTo(x1+brk, y1);
+      videoOvCtx.moveTo(x2-brk, y1); videoOvCtx.lineTo(x2, y1); videoOvCtx.lineTo(x2, y1+brk);
+      videoOvCtx.moveTo(x1, y2-brk); videoOvCtx.lineTo(x1, y2); videoOvCtx.lineTo(x1+brk, y2);
+      videoOvCtx.moveTo(x2-brk, y2); videoOvCtx.lineTo(x2, y2); videoOvCtx.lineTo(x2, y2-brk);
+      videoOvCtx.stroke();
+      videoOvCtx.fillStyle = `rgba(${r},${g},${b},${0.06 + bvpPulse * 0.5})`;
+      videoOvCtx.fillRect(x1, y1, bw, bh);
+      videoOvCtx.shadowBlur = 4;
+      videoOvCtx.font = '600 11px "Share Tech Mono", monospace';
+      videoOvCtx.textBaseline = 'bottom';
+      videoOvCtx.fillStyle = `rgba(${r},${g},${b},0.95)`;
+      videoOvCtx.fillText('FACE ROI', x1 + 2, y1 - 4);
+      videoOvCtx.restore();
+    }
+  }
+}
+
+// Replace the animate loop to use backend frames
+function animate() {
+  if (currentHR && currentQuality >= Q_GOOD) {
+    bvpPulse = (Math.sin(Date.now() / 1000 * currentHR / 60 * Math.PI * 2) + 1) / 2 * 0.12;
+  } else {
+    bvpPulse = 0;
+  }
+  drawReceivedFrame();
+  if (landmarks) {
+    drawFaceMesh(landmarks);
+  }
+  requestAnimationFrame(animate);
+}
+
+window.addEventListener('load', () => {
+  initFaceMesh();
+  // Hide the <video> element — we paint frames on the overlay canvas
+  videoEl.style.display = 'none';
+  videoStatus.textContent = 'WAITING FOR BACKEND...';
+  animate();
+});
 </script>
 </body>
 </html>
