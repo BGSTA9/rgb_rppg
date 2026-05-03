@@ -3,6 +3,7 @@ import cv2
 import time
 import threading
 import numpy as np
+from collections import deque
 from flask import Flask, render_template
 from flask_socketio import SocketIO
 
@@ -14,6 +15,87 @@ state = {"running": False, "vitals_thread": None}
 lock = threading.Lock()
 
 
+# ─────────────────────────────────────────────────────────────
+#  HRStabilizer
+#  Raw rPPG HR estimates are noisy. We apply, in order:
+#    1. Plausibility gate     (30 ≤ HR ≤ 220 BPM)
+#    2. Rolling buffer        (last N estimates)
+#    3. Median + MAD outlier rejection
+#    4. Slew-rate limit       (HR can't physically change >25 BPM/s)
+#    5. Warm-up gate          (need min_fill samples before first publish)
+#  Quality is reported as 1 − (buffer-std / 12), clipped to [0, 1].
+# ─────────────────────────────────────────────────────────────
+class HRStabilizer:
+    def __init__(self, buffer_size=8, min_fill=4, max_slew_bpm_per_sec=25.0,
+                 hr_min=30.0, hr_max=220.0):
+        self.buf = deque(maxlen=buffer_size)
+        self.min_fill = min_fill
+        self.max_slew = max_slew_bpm_per_sec
+        self.hr_min = hr_min
+        self.hr_max = hr_max
+        self._last_pub = None
+        self._last_pub_time = None
+
+    def reset(self):
+        self.buf.clear()
+        self._last_pub = None
+        self._last_pub_time = None
+
+    def push(self, hr_raw):
+        """Feed a raw HR estimate. Returns smoothed value or None if not ready."""
+        # 1) plausibility gate
+        try:
+            hr_raw = float(hr_raw) if hr_raw is not None else None
+        except (TypeError, ValueError):
+            hr_raw = None
+        if hr_raw is None or not np.isfinite(hr_raw):
+            return self._last_pub
+        if hr_raw < self.hr_min or hr_raw > self.hr_max:
+            return self._last_pub
+
+        self.buf.append(hr_raw)
+
+        # 2) warm-up
+        if len(self.buf) < self.min_fill:
+            return None
+
+        # 3) median + MAD outlier rejection
+        arr = np.array(self.buf, dtype=np.float64)
+        med = float(np.median(arr))
+        mad = float(np.median(np.abs(arr - med)))
+        threshold = max(8.0, 3.5 * mad)  # always allow at least ±8 BPM
+        keep = arr[np.abs(arr - med) <= threshold]
+        if keep.size == 0:
+            keep = arr
+        smoothed = float(np.mean(keep))
+
+        # 4) slew-rate limit
+        now = time.time()
+        if self._last_pub is not None and self._last_pub_time is not None:
+            dt = max(0.05, now - self._last_pub_time)
+            max_delta = self.max_slew * dt
+            delta = smoothed - self._last_pub
+            if abs(delta) > max_delta:
+                smoothed = self._last_pub + (max_delta if delta > 0 else -max_delta)
+
+        self._last_pub = smoothed
+        self._last_pub_time = now
+        return smoothed
+
+    def quality(self):
+        """0..1 — based on stability of recent estimates."""
+        if len(self.buf) < self.min_fill:
+            return 0.0
+        std = float(np.std(self.buf))
+        # std ≤ 2 BPM ⇒ ~1.0 quality, std ≥ 12 BPM ⇒ 0
+        return float(np.clip(1.0 - (std - 2.0) / 10.0, 0.0, 1.0))
+
+
+hr_stab = HRStabilizer()
+
+# ─────────────────────────────────────────────────────────────
+#  Routes
+# ─────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
     return render_template("dashboard.html")
@@ -23,10 +105,16 @@ def vitals_loop():
     while state["running"]:
         time.sleep(1.0)
         try:
-            result = model.hr(start=-10)
-            hr_val = None
+            # Use a longer analysis window for stable peak detection
+            # (10s gives ~10-17 cycles; 15s gives more dominant-freq stability)
+            result = model.hr(start=-15)
+            hr_raw = None
             if result and result.get("hr"):
-                hr_val = round(float(result["hr"]), 1)
+                hr_raw = float(result["hr"])
+
+            # Stabilize
+            hr_smooth = hr_stab.push(hr_raw)
+            hr_val = round(hr_smooth, 1) if hr_smooth is not None else None
 
             bvp_vals, timestamps = [], []
             try:
@@ -38,7 +126,9 @@ def vitals_loop():
                 pass
 
             socketio.emit("vitals", {
-                "hr": hr_val,
+                "hr": hr_val,                                      # smoothed (use this)
+                "hr_raw": round(hr_raw, 1) if hr_raw else None,    # for debugging
+                "quality": round(hr_stab.quality(), 2),            # 0..1 signal quality
                 "bvp": bvp_vals,
                 "timestamps": timestamps,
             })
@@ -46,11 +136,15 @@ def vitals_loop():
             print(f"vitals error: {e}")
 
 
+# ─────────────────────────────────────────────────────────────
+#  Socket handlers
+# ─────────────────────────────────────────────────────────────
 @socketio.on("connect")
 def on_connect():
     with lock:
         if not state["running"]:
             model.__enter__()
+            hr_stab.reset()
             state["running"] = True
             t = threading.Thread(target=vitals_loop, daemon=True)
             t.start()
@@ -63,6 +157,7 @@ def on_disconnect():
     with lock:
         if state["running"]:
             state["running"] = False
+            hr_stab.reset()
             try:
                 model.__exit__(None, None, None)
             except Exception as e:

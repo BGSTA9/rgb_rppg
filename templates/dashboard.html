@@ -10,16 +10,20 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1632432234/camera_utils.js" crossorigin="anonymous"></script>
   <style>
     :root {
-      --bg:       #04060d;
-      --panel:    #080c18;
-      --border:   #0f1e38;
-      --green:    #00f5a0;
-      --green-dim:#00a86b;
-      --blue:     #0af;
-      --red:      #ff3b6b;
-      --text:     #8da3c0;
-      --glow:     0 0 18px #00f5a080, 0 0 40px #00f5a030;
-      --glow-red: 0 0 18px #ff3b6b80, 0 0 40px #ff3b6b30;
+      --bg:        #04060d;
+      --panel:     #080c18;
+      --border:    #0f1e38;
+      --green:     #00f5a0;
+      --green-dim: #00a86b;
+      --cyan:      #00d9ff;
+      --amber:     #ffaa00;
+      --magenta:   #ff4dc4;
+      --blue:      #0af;
+      --red:       #ff3b6b;
+      --text:      #8da3c0;
+      --glow:      0 0 18px #00f5a080, 0 0 40px #00f5a030;
+      --glow-red:  0 0 18px #ff3b6b80, 0 0 40px #ff3b6b30;
+      --glow-amber:0 0 12px #ffaa0090;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -64,10 +68,9 @@
     }
     @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.3} }
     #clock { color: var(--blue); }
+    #fps-counter { color: var(--amber); }
 
-    /* ── Main Grid ──
-       Left  (3fr): full-height perfusion mesh
-       Right (2fr): HR on top, BVP on bottom          */
+    /* ── Main grid: full-height face panel + HR/BVP stack ── */
     main {
       display: grid;
       grid-template-columns: 3fr 2fr;
@@ -77,7 +80,6 @@
       overflow: hidden;
     }
 
-    /* ── Panel base ── */
     .panel {
       background: var(--panel);
       position: relative;
@@ -93,36 +95,55 @@
       z-index: 4;
       pointer-events: none;
     }
+    .panel-label-right {
+      position: absolute;
+      top: 12px; right: 16px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 2px;
+      color: var(--amber);
+      opacity: 0.6;
+      z-index: 4;
+      pointer-events: none;
+    }
 
-    /* ── MAIN MESH PANEL (left, full height) ── */
+    /* ── FACE MESH PANEL (left, full height) ── */
     #mesh-panel {
       grid-row: 1 / 3;
-      background: #020408;
+      background:
+        radial-gradient(ellipse at 50% 45%, #061226 0%, #02030a 80%);
     }
-
-    /* subtle dark radial vignette so edges feel depth-y */
-    #mesh-panel::before {
+    /* subtle scanline overlay for CRT vibe */
+    #mesh-panel::after {
       content: '';
       position: absolute; inset: 0;
-      background: radial-gradient(ellipse at center,
-        transparent 50%, rgba(2,4,8,0.7) 100%);
+      background: repeating-linear-gradient(
+        180deg,
+        rgba(0, 245, 160, 0.025) 0px,
+        rgba(0, 245, 160, 0.025) 1px,
+        transparent 1px,
+        transparent 3px);
       pointer-events: none;
-      z-index: 2;
+      z-index: 3;
+      mix-blend-mode: screen;
     }
-
     #mesh-canvas {
       width: 100%; height: 100%;
       display: block;
+      position: relative;
+      z-index: 1;
     }
-
-    /* "NO FACE" overlay */
     #mesh-status {
       position: absolute; top: 50%; left: 50%;
       transform: translate(-50%, -50%);
       font-family: 'Share Tech Mono', monospace;
-      font-size: 0.8rem; letter-spacing: 3px;
+      font-size: 0.85rem; letter-spacing: 4px;
       color: var(--green-dim); text-align: center;
-      pointer-events: none; z-index: 3;
+      pointer-events: none; z-index: 5;
+      padding: 14px 22px;
+      border: 1px solid var(--green-dim);
+      background: rgba(0,0,0,0.4);
+      backdrop-filter: blur(2px);
     }
 
     /* Color-bar legend */
@@ -134,12 +155,13 @@
       font-family: 'Share Tech Mono', monospace;
       font-size: 0.62rem; color: var(--text);
       z-index: 4;
+      letter-spacing: 2px;
     }
     #colorbar-gradient {
-      width: 110px; height: 6px; border-radius: 3px;
+      width: 130px; height: 6px; border-radius: 3px;
       background: linear-gradient(90deg,
-        #00008b,#0000ff,#00ffff,#00ff00,#ffff00,#ff8000,#ff0000);
-      box-shadow: 0 0 6px rgba(0,0,0,0.5);
+        #001e5c 0%, #00aaff 25%, #00f5a0 50%, #ffd000 75%, #ff3b6b 100%);
+      box-shadow: 0 0 8px rgba(0,245,160,0.3);
     }
 
     /* ── HR PANEL ── */
@@ -180,7 +202,9 @@
       color: var(--green);
       text-shadow: var(--glow);
       line-height: 1; letter-spacing: 2px;
+      transition: color 0.4s, text-shadow 0.4s;
     }
+    .hr-ring.no-signal .hr-number { color: var(--text); text-shadow: none; opacity: 0.5; }
     .hr-unit {
       font-family: 'Share Tech Mono', monospace;
       font-size: 0.72rem; color: var(--green-dim);
@@ -193,6 +217,7 @@
     .hr-status.normal { color: var(--green); }
     .hr-status.low    { color: var(--blue); }
     .hr-status.high   { color: var(--red); text-shadow: var(--glow-red); }
+    .hr-status.lost   { color: var(--amber); }
 
     .heart-icon {
       position: absolute; bottom: 12px; right: 12px;
@@ -207,6 +232,23 @@
       28%{transform:scale(1)} 42%{transform:scale(1.12)}
       70%{transform:scale(1)} 100%{transform:scale(1)}
     }
+
+    /* signal quality bars */
+    .sig-quality {
+      display: flex; gap: 3px; align-items: flex-end;
+      height: 14px;
+      margin-top: 4px;
+    }
+    .sig-bar {
+      width: 4px; background: var(--border);
+      border-radius: 1px;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .sig-bar.lit { background: var(--green); box-shadow: 0 0 4px var(--green); }
+    .sig-bar:nth-child(1) { height: 4px; }
+    .sig-bar:nth-child(2) { height: 7px; }
+    .sig-bar:nth-child(3) { height: 10px; }
+    .sig-bar:nth-child(4) { height: 13px; }
 
     /* ── BVP PANEL ── */
     #bvp-panel { padding-top: 36px; }
@@ -224,6 +266,7 @@
     .corner {
       position: absolute; width: 14px; height: 14px;
       border-color: var(--green); border-style: solid; opacity: 0.4;
+      z-index: 4;
     }
     .corner.tl { top: 8px;    left: 8px;  border-width: 1px 0 0 1px; }
     .corner.tr { top: 8px;    right: 8px; border-width: 1px 1px 0 0; }
@@ -247,15 +290,16 @@
 
 <main>
 
-  <!-- ① FACIAL PERFUSION MAP — main left panel -->
+  <!-- ① FACE MESH HUD -->
   <div class="panel" id="mesh-panel">
     <div class="panel-label">FACIAL PERFUSION MAP · rPPG SIGNAL</div>
+    <div class="panel-label-right">468 LANDMARKS · 3 ROI</div>
     <canvas id="mesh-canvas"></canvas>
     <div id="mesh-status">INITIALIZING FACE MESH...</div>
     <div id="colorbar">
-      <span>LOW</span>
+      <span>0%</span>
       <div id="colorbar-gradient"></div>
-      <span>HIGH</span>
+      <span>100%</span>
     </div>
     <div class="corner tl"></div><div class="corner tr"></div>
     <div class="corner bl"></div><div class="corner br"></div>
@@ -267,7 +311,7 @@
     <div class="corner tl"></div><div class="corner tr"></div>
     <div class="corner bl"></div><div class="corner br"></div>
     <div class="hr-ring-wrap">
-      <div class="hr-ring" id="hr-ring">
+      <div class="hr-ring no-signal" id="hr-ring">
         <div>
           <div class="hr-number" id="hr-value">--</div>
           <div class="hr-unit">BPM</div>
@@ -276,6 +320,12 @@
       <div class="heart-icon" id="heart-icon">♥</div>
     </div>
     <div class="hr-status" id="hr-status">ACQUIRING SIGNAL</div>
+    <div class="sig-quality" id="sig-quality">
+      <div class="sig-bar"></div>
+      <div class="sig-bar"></div>
+      <div class="sig-bar"></div>
+      <div class="sig-bar"></div>
+    </div>
   </div>
 
   <!-- ③ BVP OSCILLOSCOPE -->
@@ -300,24 +350,23 @@ function updateClock() {
 setInterval(updateClock, 1000); updateClock();
 
 // ═══════════════════════════════════════════
-//  SOCKET  (still needed for BVP/HR from Python)
+//  SOCKET (HR / BVP from Python)
 // ═══════════════════════════════════════════
 const socket   = io();
 const statusEl = document.getElementById('status-text');
 socket.on('connect',    () => { statusEl.textContent = 'LIVE'; });
 socket.on('disconnect', () => { statusEl.textContent = 'OFFLINE'; });
-
-// Ignore incoming video frames — mesh is drawn from MediaPipe
-socket.on('frame', () => {});
+socket.on('frame', () => {});  // ignore — mesh comes from MediaPipe
 
 // ═══════════════════════════════════════════
-//  HR DISPLAY
+//  HR DISPLAY (robust state)
 // ═══════════════════════════════════════════
 const hrValueEl  = document.getElementById('hr-value');
 const hrStatusEl = document.getElementById('hr-status');
 const hrRing     = document.getElementById('hr-ring');
 const heartIcon  = document.getElementById('heart-icon');
 const fpsEl      = document.getElementById('fps-counter');
+const sigBars    = document.querySelectorAll('#sig-quality .sig-bar');
 
 function hrZone(hr) {
   if (hr < 50)  return { label: 'BRADYCARDIA',  cls: 'low'    };
@@ -327,50 +376,88 @@ function hrZone(hr) {
   return               { label: 'TACHYCARDIA',  cls: 'high'   };
 }
 
+let currentHR        = null;
+let lastValidHRTime  = 0;
+let lastVitalsTime   = 0;
+let signalQuality    = 0;   // 0..1
+
+function setHR(hr) {
+  // Plausibility gate: human HR is 30..220 bpm
+  if (typeof hr !== 'number' || !isFinite(hr) || hr < 30 || hr > 220) return false;
+  currentHR        = hr;
+  lastValidHRTime  = Date.now();
+  hrValueEl.textContent  = Math.round(hr);
+  const zone = hrZone(hr);
+  hrStatusEl.textContent = zone.label;
+  hrStatusEl.className   = 'hr-status ' + zone.cls;
+  hrRing.classList.add('beating');
+  hrRing.classList.remove('no-signal');
+  heartIcon.classList.add('beating');
+  const dur = (60 / hr).toFixed(2) + 's';
+  heartIcon.style.animationDuration = dur;
+  hrRing.style.animationDuration    = dur;
+  return true;
+}
+
+function clearHR(reason='ACQUIRING SIGNAL', cls='') {
+  currentHR = null;
+  hrValueEl.textContent  = '--';
+  hrStatusEl.textContent = reason;
+  hrStatusEl.className   = 'hr-status' + (cls ? ' ' + cls : '');
+  hrRing.classList.remove('beating');
+  hrRing.classList.add('no-signal');
+  heartIcon.classList.remove('beating');
+}
+
+function setSignalQuality(q) {
+  signalQuality = Math.max(0, Math.min(1, q));
+  const lit = Math.round(signalQuality * 4);
+  sigBars.forEach((b, i) => b.classList.toggle('lit', i < lit));
+}
+
+// Watchdog — drop HR if no fresh data
+setInterval(() => {
+  const now = Date.now();
+  if (currentHR && now - lastValidHRTime > 5000) {
+    clearHR('SIGNAL LOST', 'lost');
+    setSignalQuality(0);
+  }
+  if (lastVitalsTime && now - lastVitalsTime > 8000) {
+    setSignalQuality(0);
+  }
+}, 1000);
+
 // ═══════════════════════════════════════════
-//  PERFUSION STATE
-//  rPPG literature weights:
-//    cheeks > forehead > nose > chin
+//  PERFUSION STATE (drives ROI fill colors)
+//  rPPG ROIs: cheeks > forehead > nose
 // ═══════════════════════════════════════════
 let perfusion = {
-  forehead:    0.25,
-  left_cheek:  0.18,
-  right_cheek: 0.18,
-  nose:        0.20,
-  chin:        0.10,
+  forehead:    0.30,
+  leftCheek:   0.50,
+  rightCheek:  0.50,
 };
-let currentHR = null;
-let bvpPulse  = 0;    // oscillates with heartbeat
+let bvpPulse = 0;  // breathing-light pulse (0..0.15)
 
-socket.on('vitals', ({ hr, bvp }) => {
-  // ── HR ──────────────────────────────────
-  if (typeof hr === 'number' && isFinite(hr) && hr > 0) {
-    currentHR = hr;
-    hrValueEl.textContent  = hr.toFixed(1);
-    const zone = hrZone(hr);
-    hrStatusEl.textContent = zone.label;
-    hrStatusEl.className   = 'hr-status ' + zone.cls;
-    hrRing.classList.add('beating');
-    heartIcon.classList.add('beating');
-    const dur = (60 / hr).toFixed(2) + 's';
-    heartIcon.style.animationDuration = dur;
-    hrRing.style.animationDuration    = dur;
+socket.on('vitals', ({ hr, bvp, quality }) => {
+  lastVitalsTime = Date.now();
+  setHR(hr);
+
+  // Signal quality comes from the backend stabilizer (HR estimate stddev)
+  if (typeof quality === 'number') setSignalQuality(quality);
+
+  if (Array.isArray(bvp) && bvp.length > 10) {
+    const recent = bvp.slice(-90);
+    let mn = Infinity, mx = -Infinity;
+    for (const v of recent) {
+      if (v < mn) mn = v; if (v > mx) mx = v;
+    }
+    const amp = Math.max(0, Math.min(1, mx - mn));
+    perfusion.forehead   = 0.28 + amp * 0.45;
+    perfusion.leftCheek  = 0.50 + amp * 0.50;
+    perfusion.rightCheek = 0.50 + amp * 0.50;
   }
 
-  // ── BVP → per-region amplitude ──────────
-  if (bvp && bvp.length > 10) {
-    const recent = bvp.slice(-60);
-    const amp = Math.max(0, Math.min(1,
-      Math.max(...recent) - Math.min(...recent)));
-    perfusion.forehead    = 0.28 + amp * 0.42;
-    perfusion.left_cheek  = 0.52 + amp * 0.48;
-    perfusion.right_cheek = 0.52 + amp * 0.48;
-    perfusion.nose        = 0.33 + amp * 0.28;
-    perfusion.chin        = 0.12 + amp * 0.18;
-  }
-
-  // ── BVP waveform ────────────────────────
-  if (bvp && bvp.length > 2) drawOscilloscope(bvp);
+  if (Array.isArray(bvp) && bvp.length > 2) drawOscilloscope(bvp);
 });
 
 // ═══════════════════════════════════════════
@@ -380,23 +467,34 @@ const bvpCanvas = document.getElementById('bvp-canvas');
 const bvpCtx    = bvpCanvas.getContext('2d');
 let bvpBuffer   = new Array(300).fill(0);
 
+function sizeCanvas(canvas, ctx) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { W, H };
+}
+
 function drawOscilloscope(newData) {
   bvpBuffer.push(...newData);
   bvpBuffer = bvpBuffer.slice(-300);
-  const W = bvpCanvas.offsetWidth;
-  const H = bvpCanvas.offsetHeight;
-  bvpCanvas.width = W; bvpCanvas.height = H;
+  const { W, H } = sizeCanvas(bvpCanvas, bvpCtx);
   const mn  = Math.min(...bvpBuffer);
   const mx  = Math.max(...bvpBuffer);
   const rng = mx - mn || 1;
   bvpCtx.clearRect(0, 0, W, H);
+
   const g = bvpCtx.createLinearGradient(0, 0, W, 0);
   g.addColorStop(0,   'rgba(0,245,160,0)');
   g.addColorStop(0.6, 'rgba(0,245,160,0.4)');
   g.addColorStop(1,   'rgba(0,245,160,1)');
-  bvpCtx.lineWidth = 2.5; bvpCtx.strokeStyle = g;
-  bvpCtx.shadowColor = '#00f5a0'; bvpCtx.shadowBlur = 14;
-  bvpCtx.lineJoin = 'round';
+  bvpCtx.lineWidth   = 2.5;
+  bvpCtx.strokeStyle = g;
+  bvpCtx.shadowColor = '#00f5a0';
+  bvpCtx.shadowBlur  = 14;
+  bvpCtx.lineJoin    = 'round';
   bvpCtx.beginPath();
   bvpBuffer.forEach((v, i) => {
     const x = (i / (bvpBuffer.length - 1)) * W;
@@ -404,6 +502,7 @@ function drawOscilloscope(newData) {
     i === 0 ? bvpCtx.moveTo(x, y) : bvpCtx.lineTo(x, y);
   });
   bvpCtx.stroke();
+
   const lastY = H - ((bvpBuffer.at(-1) - mn) / rng) * H * 0.85 - H * 0.075;
   bvpCtx.beginPath();
   bvpCtx.arc(W - 3, lastY, 5, 0, Math.PI * 2);
@@ -413,50 +512,82 @@ function drawOscilloscope(newData) {
 }
 
 // ═══════════════════════════════════════════
-//  FACIAL PERFUSION MAP
+//  FACE MESH — HUD STYLE
 // ═══════════════════════════════════════════
-
-// Jet colormap   0=blue → 0.5=green → 1=red
-function jet(t) {
-  t = Math.max(0, Math.min(1, t));
-  const r = Math.min(1, Math.max(0, 1.5 - Math.abs(4*t - 3)));
-  const g = Math.min(1, Math.max(0, 1.5 - Math.abs(4*t - 2)));
-  const b = Math.min(1, Math.max(0, 1.5 - Math.abs(4*t - 1)));
-  return [Math.round(r*255), Math.round(g*255), Math.round(b*255)];
-}
-
-// Map normalised face coordinate → perfusion intensity
-function regionIntensity(nx, ny) {
-  if (ny < 0.28)                              return perfusion.forehead;
-  if (ny < 0.58 && nx > 0.30 && nx < 0.70)  return perfusion.nose;
-  if (ny < 0.74 && nx <= 0.46)               return perfusion.left_cheek;
-  if (ny < 0.74 && nx >= 0.54)               return perfusion.right_cheek;
-  return perfusion.chin;
-}
+//
+// Visualization layers (back → front):
+//   1. Faint full FACEMESH_TESSELATION — circuit-board feel
+//   2. ROI polygon fills (forehead / L-cheek / R-cheek), color = perfusion
+//   3. Bright contour outlines (oval, eyes, brows, lips)
+//   4. Animated horizontal scan line + glow trail
+//   5. HUD: bbox brackets, center reticle, ROI leader-line labels
+//
+// ═══════════════════════════════════════════
 
 const meshCanvas = document.getElementById('mesh-canvas');
 const meshCtx    = meshCanvas.getContext('2d');
 const meshStatus = document.getElementById('mesh-status');
 let   landmarks  = null;
 let   meshReady  = false;
-let   meshFPS    = 0, meshFPSTime = performance.now(), meshFPSCount = 0;
+let   meshFPSCount = 0, meshFPSTime = performance.now();
 
-// Animate at 30fps — pulse brightness tracks heartbeat
+// ROI polygons — landmark indices for forehead and cheeks (rPPG zones)
+// Ordered to form closed polygons.
+const ROI_POLYGONS = {
+  forehead: {
+    points: [109, 10, 338, 297, 332, 333, 299, 337, 151, 108, 69, 104, 67],
+    label:  'FOREHEAD',
+    side:   'top',
+  },
+  leftCheek: {  // viewer's left
+    points: [50, 101, 36, 205, 187, 123, 117, 118, 119, 100],
+    label:  'CHEEK · L',
+    side:   'left',
+  },
+  rightCheek: { // viewer's right
+    points: [280, 330, 266, 425, 411, 352, 346, 347, 348, 329],
+    label:  'CHEEK · R',
+    side:   'right',
+  },
+};
+
+// Heat-map colormap: navy → cyan → green → yellow → red
+function perfColor(t) {
+  t = Math.max(0, Math.min(1, t));
+  let r, g, b;
+  if (t < 0.25) {
+    const k = t / 0.25;
+    r = 0;                       g = Math.round(170 * k);     b = Math.round(92 + 163 * k);
+  } else if (t < 0.5) {
+    const k = (t - 0.25) / 0.25;
+    r = 0;                       g = Math.round(170 + 85 * k); b = Math.round(255 - 95 * k);
+  } else if (t < 0.75) {
+    const k = (t - 0.5) / 0.25;
+    r = Math.round(255 * k);     g = 255;                     b = Math.round(160 - 160 * k);
+  } else {
+    const k = (t - 0.75) / 0.25;
+    r = 255;                     g = Math.round(255 - 196 * k); b = Math.round(40 * k);
+  }
+  return [r, g, b];
+}
+
+// Animation loop: pulse brightness from heart rate, then draw
 function animateMesh() {
   if (currentHR) {
-    bvpPulse = (Math.sin(Date.now() / 1000 * currentHR / 60 * Math.PI * 2) + 1) / 2 * 0.11;
+    bvpPulse = (Math.sin(Date.now() / 1000 * currentHR / 60 * Math.PI * 2) + 1) / 2 * 0.12;
+  } else {
+    bvpPulse = (Math.sin(Date.now() / 800) + 1) / 2 * 0.04;  // idle shimmer
   }
-  if (landmarks) drawPerfusion(landmarks);
+  if (landmarks) drawFaceMesh(landmarks);
   requestAnimationFrame(animateMesh);
 }
 animateMesh();
 
-function drawPerfusion(lms) {
-  const W = meshCanvas.offsetWidth;
-  const H = meshCanvas.offsetHeight;
-  meshCanvas.width = W; meshCanvas.height = H;
+function drawFaceMesh(lms) {
+  const { W, H } = sizeCanvas(meshCanvas, meshCtx);
+  meshCtx.clearRect(0, 0, W, H);
 
-  // FPS counter for mesh
+  // FPS
   meshFPSCount++;
   const now = performance.now();
   if (now - meshFPSTime >= 1000) {
@@ -464,81 +595,235 @@ function drawPerfusion(lms) {
     meshFPSCount = 0; meshFPSTime = now;
   }
 
-  // Face bounding box
+  // Face bounding box (in normalized coords)
   let minX = 1, maxX = 0, minY = 1, maxY = 0;
-  lms.forEach(lm => {
-    minX = Math.min(minX, lm.x); maxX = Math.max(maxX, lm.x);
-    minY = Math.min(minY, lm.y); maxY = Math.max(maxY, lm.y);
-  });
+  for (const lm of lms) {
+    if (lm.x < minX) minX = lm.x; if (lm.x > maxX) maxX = lm.x;
+    if (lm.y < minY) minY = lm.y; if (lm.y > maxY) maxY = lm.y;
+  }
   const fW = maxX - minX || 1;
   const fH = maxY - minY || 1;
 
-  // Keep face centred with padding and correct aspect ratio
+  // Fit face into canvas with padding, preserving aspect
+  const PAD = 0.78;
   const faceAR = fW / fH;
   const canvasAR = W / H;
-  let dW, dH, oX, oY;
-  if (faceAR < canvasAR) {
-    dH = H * 0.86;
-    dW = dH * faceAR;
-  } else {
-    dW = W * 0.86;
-    dH = dW / faceAR;
+  let dW, dH;
+  if (faceAR < canvasAR) { dH = H * PAD; dW = dH * faceAR; }
+  else                    { dW = W * PAD; dH = dW / faceAR; }
+  const oX = (W - dW) / 2;
+  const oY = (H - dH) / 2;
+
+  // Pre-compute screen coords for all landmarks
+  const sx = new Float32Array(lms.length);
+  const sy = new Float32Array(lms.length);
+  for (let i = 0; i < lms.length; i++) {
+    sx[i] = oX + ((lms[i].x - minX) / fW) * dW;
+    sy[i] = oY + ((lms[i].y - minY) / fH) * dH;
   }
-  oX = (W - dW) / 2;
-  oY = (H - dH) / 2;
 
-  const toX = lm => ((lm.x - minX) / fW) * dW + oX;
-  const toY = lm => ((lm.y - minY) / fH) * dH + oY;
-
-  // ── 1. Heat-map blobs (Gaussian splat per landmark) ──
-  const blobR = Math.min(dW, dH) * 0.065;
-  lms.forEach(lm => {
-    const px = toX(lm), py = toY(lm);
-    const nx = (lm.x - minX) / fW;
-    const ny = (lm.y - minY) / fH;
-    const intensity = Math.min(1, regionIntensity(nx, ny) + bvpPulse);
-    const [r, g, b] = jet(intensity);
-
-    const grad = meshCtx.createRadialGradient(px, py, 0, px, py, blobR);
-    grad.addColorStop(0,    `rgba(${r},${g},${b},0.60)`);
-    grad.addColorStop(0.45, `rgba(${r},${g},${b},0.22)`);
-    grad.addColorStop(1,    `rgba(${r},${g},${b},0)`);
-    meshCtx.beginPath();
-    meshCtx.arc(px, py, blobR, 0, Math.PI * 2);
-    meshCtx.fillStyle = grad;
-    meshCtx.fill();
-  });
-
-  // ── 2. Wireframe tessellation ──
-  if (window.FACEMESH_TESSELATION && FACEMESH_TESSELATION.length) {
+  // ─── 1. Faint full tessellation ───
+  if (window.FACEMESH_TESSELATION) {
     meshCtx.save();
-    meshCtx.globalAlpha = 0.22;
-    meshCtx.strokeStyle = '#cde0f5';
+    meshCtx.strokeStyle = 'rgba(0, 217, 255, 0.16)';
     meshCtx.lineWidth   = 0.5;
     meshCtx.beginPath();
-    FACEMESH_TESSELATION.forEach(([i, j]) => {
-      const a = lms[i], b = lms[j];
-      if (!a || !b) return;
-      meshCtx.moveTo(toX(a), toY(a));
-      meshCtx.lineTo(toX(b), toY(b));
-    });
+    for (const [i, j] of FACEMESH_TESSELATION) {
+      meshCtx.moveTo(sx[i], sy[i]);
+      meshCtx.lineTo(sx[j], sy[j]);
+    }
     meshCtx.stroke();
     meshCtx.restore();
   }
 
-  // ── 3. Landmark dots ──
-  meshCtx.save();
-  meshCtx.globalAlpha = 0.35;
-  lms.forEach(lm => {
-    const px = toX(lm), py = toY(lm);
-    const nx = (lm.x - minX) / fW;
-    const ny = (lm.y - minY) / fH;
-    const [r, g, b] = jet(Math.min(1, regionIntensity(nx, ny) + bvpPulse));
+  // ─── 2. ROI polygon fills (the rPPG zones) ───
+  const roiCenters = {};
+  for (const [key, roi] of Object.entries(ROI_POLYGONS)) {
+    const pts = roi.points;
+    const intensity = Math.min(1, perfusion[key] + bvpPulse);
+    const [r, g, b] = perfColor(intensity);
+
+    // centroid for radial gradient + label anchor
+    let cx = 0, cy = 0;
+    for (const idx of pts) { cx += sx[idx]; cy += sy[idx]; }
+    cx /= pts.length; cy /= pts.length;
+    roiCenters[key] = { cx, cy };
+
+    // path
     meshCtx.beginPath();
-    meshCtx.arc(px, py, 1.5, 0, Math.PI * 2);
-    meshCtx.fillStyle = `rgb(${r},${g},${b})`;
+    meshCtx.moveTo(sx[pts[0]], sy[pts[0]]);
+    for (let i = 1; i < pts.length; i++) meshCtx.lineTo(sx[pts[i]], sy[pts[i]]);
+    meshCtx.closePath();
+
+    // fill with radial gradient
+    const radius = Math.max(30, Math.min(dW, dH) * 0.13);
+    const grad = meshCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    grad.addColorStop(0,    `rgba(${r},${g},${b},0.62)`);
+    grad.addColorStop(0.55, `rgba(${r},${g},${b},0.30)`);
+    grad.addColorStop(1,    `rgba(${r},${g},${b},0.05)`);
+    meshCtx.save();
+    meshCtx.fillStyle = grad;
     meshCtx.fill();
-  });
+
+    // glowing outline
+    meshCtx.strokeStyle = `rgba(${r},${g},${b},0.95)`;
+    meshCtx.lineWidth   = 1.4;
+    meshCtx.shadowColor = `rgb(${r},${g},${b})`;
+    meshCtx.shadowBlur  = 14;
+    meshCtx.stroke();
+    meshCtx.restore();
+  }
+
+  // ─── 3. Feature outlines ───
+  const features = [
+    { set: window.FACEMESH_FACE_OVAL,     color: 'rgba(0, 245, 160, 0.85)', width: 1.4, blur: 8 },
+    { set: window.FACEMESH_LIPS,          color: 'rgba(255, 77, 196, 0.90)', width: 1.0, blur: 6 },
+    { set: window.FACEMESH_LEFT_EYE,      color: 'rgba(0, 217, 255, 1.0)',  width: 1.2, blur: 7 },
+    { set: window.FACEMESH_RIGHT_EYE,     color: 'rgba(0, 217, 255, 1.0)',  width: 1.2, blur: 7 },
+    { set: window.FACEMESH_LEFT_EYEBROW,  color: 'rgba(0, 245, 160, 0.85)', width: 1.0, blur: 5 },
+    { set: window.FACEMESH_RIGHT_EYEBROW, color: 'rgba(0, 245, 160, 0.85)', width: 1.0, blur: 5 },
+  ];
+  for (const f of features) {
+    if (!f.set) continue;
+    meshCtx.save();
+    meshCtx.strokeStyle = f.color;
+    meshCtx.lineWidth   = f.width;
+    meshCtx.shadowColor = f.color;
+    meshCtx.shadowBlur  = f.blur;
+    meshCtx.beginPath();
+    for (const [i, j] of f.set) {
+      meshCtx.moveTo(sx[i], sy[i]);
+      meshCtx.lineTo(sx[j], sy[j]);
+    }
+    meshCtx.stroke();
+    meshCtx.restore();
+  }
+
+  // ─── 4. Scan line (top→bottom sweep) ───
+  const scanPeriod = 3200;
+  const t = (Date.now() % scanPeriod) / scanPeriod;
+  const scanY = oY + t * dH;
+  meshCtx.save();
+  // glow trail above
+  const trailH = 80;
+  const trailGrad = meshCtx.createLinearGradient(0, scanY - trailH, 0, scanY);
+  trailGrad.addColorStop(0, 'rgba(0, 245, 160, 0)');
+  trailGrad.addColorStop(1, 'rgba(0, 245, 160, 0.18)');
+  meshCtx.fillStyle = trailGrad;
+  meshCtx.fillRect(oX, Math.max(oY, scanY - trailH), dW, Math.min(trailH, scanY - oY));
+  // line itself
+  meshCtx.strokeStyle = 'rgba(0, 245, 160, 0.95)';
+  meshCtx.lineWidth   = 1;
+  meshCtx.shadowColor = '#00f5a0';
+  meshCtx.shadowBlur  = 10;
+  meshCtx.beginPath();
+  meshCtx.moveTo(oX, scanY);
+  meshCtx.lineTo(oX + dW, scanY);
+  meshCtx.stroke();
+  meshCtx.restore();
+
+  // ─── 5. HUD overlay ───
+  drawHUD(oX, oY, dW, dH, roiCenters);
+}
+
+function drawHUD(oX, oY, dW, dH, roiCenters) {
+  const brk = 20;
+  meshCtx.save();
+  meshCtx.strokeStyle = '#ffaa00';
+  meshCtx.lineWidth   = 1.3;
+  meshCtx.shadowColor = '#ffaa00';
+  meshCtx.shadowBlur  = 5;
+
+  // Bracket corners around face bbox
+  const corners = [
+    [oX, oY + brk, oX, oY, oX + brk, oY],                                 // TL
+    [oX + dW - brk, oY, oX + dW, oY, oX + dW, oY + brk],                  // TR
+    [oX, oY + dH - brk, oX, oY + dH, oX + brk, oY + dH],                  // BL
+    [oX + dW - brk, oY + dH, oX + dW, oY + dH, oX + dW, oY + dH - brk],   // BR
+  ];
+  for (const [x1, y1, x2, y2, x3, y3] of corners) {
+    meshCtx.beginPath();
+    meshCtx.moveTo(x1, y1);
+    meshCtx.lineTo(x2, y2);
+    meshCtx.lineTo(x3, y3);
+    meshCtx.stroke();
+  }
+
+  // Center reticle
+  const cx = oX + dW / 2, cy = oY + dH / 2;
+  meshCtx.globalAlpha = 0.55;
+  meshCtx.beginPath();
+  meshCtx.arc(cx, cy, 5, 0, Math.PI * 2);
+  meshCtx.moveTo(cx - 14, cy); meshCtx.lineTo(cx - 7, cy);
+  meshCtx.moveTo(cx + 7, cy);  meshCtx.lineTo(cx + 14, cy);
+  meshCtx.moveTo(cx, cy - 14); meshCtx.lineTo(cx, cy - 7);
+  meshCtx.moveTo(cx, cy + 7);  meshCtx.lineTo(cx, cy + 14);
+  meshCtx.stroke();
+  meshCtx.globalAlpha = 1;
+  meshCtx.restore();
+
+  // ROI leader-line labels
+  for (const [key, roi] of Object.entries(ROI_POLYGONS)) {
+    const c = roiCenters[key];
+    if (!c) continue;
+    const intensity = Math.min(1, perfusion[key] + bvpPulse);
+    const value     = (intensity * 100).toFixed(0) + '%';
+    drawROILabel(c.cx, c.cy, oX, oY, dW, dH, roi.label, value, roi.side, intensity);
+  }
+}
+
+function drawROILabel(cx, cy, oX, oY, dW, dH, label, value, side, intensity) {
+  const [r, g, b] = perfColor(intensity);
+  const labelColor = `rgb(${r},${g},${b})`;
+
+  // Where the label box anchors (just past the bbox edge)
+  let ax, ay, tx, ty, align;
+  const off = 18;
+  if (side === 'right') {
+    ax = oX + dW + off;  ay = cy;
+    tx = ax + 8;          ty = ay;
+    align = 'left';
+  } else if (side === 'left') {
+    ax = oX - off;        ay = cy;
+    tx = ax - 8;          ty = ay;
+    align = 'right';
+  } else { // top
+    ax = cx;              ay = oY - off;
+    tx = ax;              ty = ay - 4;
+    align = 'center';
+  }
+
+  meshCtx.save();
+  // leader line (dashed)
+  meshCtx.setLineDash([3, 3]);
+  meshCtx.strokeStyle = 'rgba(255, 170, 0, 0.7)';
+  meshCtx.lineWidth   = 1;
+  meshCtx.beginPath();
+  meshCtx.moveTo(cx, cy);
+  meshCtx.lineTo(ax, ay);
+  meshCtx.stroke();
+  meshCtx.setLineDash([]);
+
+  // anchor dot
+  meshCtx.fillStyle = '#ffaa00';
+  meshCtx.shadowColor = '#ffaa00';
+  meshCtx.shadowBlur  = 4;
+  meshCtx.beginPath();
+  meshCtx.arc(ax, ay, 2.5, 0, Math.PI * 2);
+  meshCtx.fill();
+  meshCtx.shadowBlur = 0;
+
+  // text
+  meshCtx.textAlign    = align;
+  meshCtx.textBaseline = 'middle';
+  meshCtx.font = '600 10px "Share Tech Mono", monospace';
+  meshCtx.fillStyle = '#ffaa00';
+  meshCtx.fillText(label, tx, ty - 7);
+  meshCtx.font = '700 13px "Share Tech Mono", monospace';
+  meshCtx.fillStyle = labelColor;
+  meshCtx.shadowColor = labelColor;
+  meshCtx.shadowBlur  = 6;
+  meshCtx.fillText(value, tx, ty + 7);
   meshCtx.restore();
 }
 
@@ -565,7 +850,7 @@ function initFaceMesh() {
 
   const mpVideo = document.getElementById('mp-video');
 
-  // Downscaled JPEG capture → Python rPPG model (face_frame / no_face).
+  // Downscaled JPEG capture → Python rPPG model
   const captureCanvas = document.createElement('canvas');
   captureCanvas.width  = 640;
   captureCanvas.height = 480;
@@ -583,7 +868,7 @@ function initFaceMesh() {
     captureCanvas.toBlob(blob => {
       if (!blob) return;
       blob.arrayBuffer().then(buf => socket.emit('face_frame', { img: buf, ts }));
-    }, 'image/jpeg', 0.85);
+    }, 'image/jpeg', 0.92);
   }
 
   faceMesh.onResults(results => {
@@ -598,9 +883,7 @@ function initFaceMesh() {
       landmarks = null;
       meshStatus.style.display = 'block';
       meshStatus.textContent   = 'NO FACE DETECTED';
-      const W = meshCanvas.offsetWidth;
-      const H = meshCanvas.offsetHeight;
-      meshCanvas.width = W; meshCanvas.height = H;
+      const { W, H } = sizeCanvas(meshCanvas, meshCtx);
       meshCtx.clearRect(0, 0, W, H);
     }
     sendBackendFrame(hasFace);
