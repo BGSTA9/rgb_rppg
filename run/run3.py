@@ -50,7 +50,6 @@ from typing import Optional, NamedTuple
 import cv2
 import numpy as np
 from scipy import signal as sp_signal
-import rppg
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Logging
@@ -701,7 +700,9 @@ def draw_overlay(
 # Main
 # ──────────────────────────────────────────────────────────────────────────────
 def main() -> None:
-    model       = rppg.Model()
+    cap = cv2.VideoCapture(CFG.camera_index)
+    if not cap.isOpened():
+        raise RuntimeError(f"Cannot open camera {CFG.camera_index}")
     detector    = FaceDetector()
     buf_maxlen  = int(CFG.target_fps * CFG.window_seconds)
     buf         = SignalBuffer(maxlen=buf_maxlen)
@@ -712,40 +713,43 @@ def main() -> None:
     worker.start()
 
     try:
-        with model.video_capture(CFG.camera_index):
-            for frame, _ in model.preview:
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                log.warning("Frame capture failed.")
+                break
 
-                # ── FPS ───────────────────────────────────────────────────────
-                now = time.perf_counter()
-                fps_times.append(now)
-                fps = (len(fps_times) / (fps_times[-1] - fps_times[0] + 1e-9)
-                       if len(fps_times) > 1 else 0.0)
+            # ── FPS ───────────────────────────────────────────────────────
+            now = time.perf_counter()
+            fps_times.append(now)
+            fps = (len(fps_times) / (fps_times[-1] - fps_times[0] + 1e-9)
+                   if len(fps_times) > 1 else 0.0)
 
-                # ── Face detection ────────────────────────────────────────────
-                face_box = detector.detect(frame)
+            # ── Face detection ────────────────────────────────────────────
+            face_box = detector.detect(frame)
 
-                # ── Signal extraction (main loop, ~µs) ───────────────────────
-                if face_box is not None:
-                    rgb = ROIExtractor.extract(frame, face_box)
-                    if rgb is not None:
-                        buf.push(rgb, now)
+            # ── Signal extraction (main loop, ~µs) ───────────────────────
+            if face_box is not None:
+                rgb = ROIExtractor.extract(frame, face_box)
+                if rgb is not None:
+                    buf.push(rgb, now)
 
-                # ── Read pipeline result (non-blocking) ───────────────────────
-                result = worker.result
+            # ── Read pipeline result (non-blocking) ───────────────────────
+            result = worker.result
 
-                # ── Draw ──────────────────────────────────────────────────────
-                draw_overlay(frame, result, face_box, fps, len(buf))
+            # ── Draw ──────────────────────────────────────────────────────
+            draw_overlay(frame, result, face_box, fps, len(buf))
 
-                cv2.imshow(CFG.window_title, frame)
-                if cv2.waitKey(1) & 0xFF == ord(CFG.quit_key):
-                    log.info("Quit key pressed.")
-                    break
+            cv2.imshow(CFG.window_title, frame)
+            if cv2.waitKey(1) & 0xFF == ord(CFG.quit_key):
+                log.info("Quit key pressed.")
+                break
 
     except KeyboardInterrupt:
         log.info("Interrupted.")
     finally:
         worker.stop()
+        cap.release()
         cv2.destroyAllWindows()
         log.info("Shut down cleanly.")
 
