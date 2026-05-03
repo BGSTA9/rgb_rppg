@@ -3,6 +3,7 @@ import cv2
 import time
 import threading
 import numpy as np
+import base64
 from collections import deque
 from flask import Flask, render_template
 from flask_socketio import SocketIO
@@ -21,9 +22,9 @@ lock = threading.Lock()
 #    1. Plausibility gate     (30 ≤ HR ≤ 220 BPM)
 #    2. Rolling buffer        (last N estimates)
 #    3. Median + MAD outlier rejection
-#    4. Slew-rate limit       (HR can't physically change >25 BPM/s)
+#    4. Slew-rate limit       (HR can't physically change >15 BPM/s)
 #    5. Warm-up gate          (need min_fill samples before first publish)
-#  Quality is reported as 1 − (buffer-std / 12), clipped to [0, 1].
+#  Quality blends library SQI with buffer stability.
 # ─────────────────────────────────────────────────────────────
 class HRStabilizer:
     def __init__(self, buffer_size=12, min_fill=5, max_slew_bpm_per_sec=15.0,
@@ -104,25 +105,56 @@ def index():
 def capture_and_vitals():
     """
     Main pipeline thread: uses model.video_capture(0) to let open-rppg
-    handle its own camera capture + face detection + signal extraction.
-    We then periodically query model.hr() and model.bvp() for results.
+    handle camera capture, face detection, and signal extraction internally.
+
+    The model.preview generator yields (frame, box) pairs. We:
+      1. Stream the camera frame to the browser for display
+      2. Periodically query model.hr() and model.bvp() for vital signs
     """
     try:
         with model.video_capture(0):
             print("✓ Camera opened by open-rppg pipeline")
             last_hr_query = 0
+            frame_count = 0
 
             for frame, box in model.preview:
                 if not state["running"]:
                     break
 
+                frame_count += 1
                 now = time.time()
 
-                # Query HR every ~1 second to avoid overhead
+                # ── Stream video frame to browser (every 2nd frame ≈ 15fps) ──
+                if frame_count % 2 == 0:
+                    try:
+                        # frame is RGB from open-rppg; convert to BGR for JPEG
+                        bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                        _, jpeg = cv2.imencode('.jpg', bgr,
+                                               [cv2.IMWRITE_JPEG_QUALITY, 70])
+                        b64 = base64.b64encode(jpeg.tobytes()).decode('ascii')
+
+                        # Send face bounding box if available
+                        face_box = None
+                        if box is not None:
+                            # box format: [[row_min, row_max], [col_min, col_max]]
+                            face_box = {
+                                "y1": int(box[0][0]), "y2": int(box[0][1]),
+                                "x1": int(box[1][0]), "x2": int(box[1][1]),
+                            }
+
+                        socketio.emit("camera_frame", {
+                            "img": b64,
+                            "box": face_box,
+                            "w": frame.shape[1],
+                            "h": frame.shape[0],
+                        })
+                    except Exception as e:
+                        print(f"frame stream error: {e}")
+
+                # ── Query vitals every ~1 second ──
                 if now - last_hr_query >= 1.0:
                     last_hr_query = now
                     try:
-                        # Use the library's SQI for quality assessment
                         result = model.hr(start=-15)
                         hr_raw = None
                         sqi = 0.0
@@ -136,7 +168,7 @@ def capture_and_vitals():
                         hr_smooth = hr_stab.push(hr_raw)
                         hr_val = round(hr_smooth, 1) if hr_smooth is not None else None
 
-                        # Combine library SQI with our stabilizer quality
+                        # Blend library SQI with our stabilizer quality
                         stab_q = hr_stab.quality()
                         combined_quality = (sqi * 0.6 + stab_q * 0.4) if sqi > 0 else stab_q
 
@@ -160,10 +192,6 @@ def capture_and_vitals():
                         })
                     except Exception as e:
                         print(f"vitals query error: {e}")
-
-                # Small sleep to not hog CPU, the preview generator
-                # already paces itself but we add a tiny yield
-                time.sleep(0.005)
 
     except Exception as e:
         print(f"capture_and_vitals error: {e}")
@@ -199,18 +227,6 @@ def on_disconnect():
             except Exception as e:
                 print(f"model stop error: {e}")
     print("Client disconnected")
-
-
-# Keep face_frame/no_face handlers as no-ops for backward compatibility
-# (the frontend still sends them but open-rppg handles its own camera now)
-@socketio.on("face_frame")
-def on_face_frame(data):
-    pass
-
-
-@socketio.on("no_face")
-def on_no_face(data):
-    pass
 
 
 if __name__ == "__main__":
