@@ -3,7 +3,6 @@ import time
 import logging
 from collections import deque
 from dataclasses import dataclass, field
-
 import cv2
 import rppg
 
