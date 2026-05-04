@@ -1,16 +1,3 @@
-"""
-rPPG Real-Time Heart Rate Monitor
-----------------------------------
-Improvements:
-  - HR smoothing via rolling average (reduces noisy spikes)
-  - HR zone classification with color-coded feedback
-  - FPS counter for performance monitoring
-  - Adaptive HR poll interval with cooldown guard
-  - Structured overlay: zone badge, BPM reading, history bar, status dot
-  - Graceful error handling and clean shutdown
-  - Config dataclass for easy tuning
-  - Logging instead of bare print()
-"""
 
 import time
 import logging
