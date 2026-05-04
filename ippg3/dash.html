@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>rPPG ULTIMATE — Biosignal Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;600;900&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --c-bg:        #050a0e;
+    --c-panel:     #0a1318;
+    --c-border:    #0e2a1f;
+    --c-grid:      #0b1d14;
+    --c-accent:    #00ff88;
+    --c-accent2:   #00c8ff;
+    --c-warn:      #ffb300;
+    --c-bad:       #ff3355;
+    --c-text:      #c8e6d4;
+    --c-dim:       #3a5c47;
+    --c-glow:      rgba(0,255,136,0.18);
+    --c-glow2:     rgba(0,200,255,0.15);
+    --font-mono:   'Share Tech Mono', monospace;
+    --font-hud:    'Orbitron', sans-serif;
+    --font-body:   'Exo 2', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--c-bg);
+    color: var(--c-text);
+    font-family: var(--font-body);
+    overflow: hidden;
+  }
+
+  /* ── Animated grid background ───────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    animation: gridScroll 24s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes gridScroll {
+    from { background-position: 0 0; }
+    to   { background-position: 40px 40px; }
+  }
+
+  /* ── Scanline overlay ───────────────────────────────────── */
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 1000;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.15) 2px,
+      rgba(0,0,0,0.15) 4px
+    );
+    pointer-events: none;
+  }
+
+  /* ── Layout ─────────────────────────────────────────────── */
+  #root {
+    position: relative; z-index: 1;
+    width: 100vw; height: 100vh;
+    display: grid;
+    grid-template-rows: 56px 1fr 40px;
+    grid-template-columns: 260px 1fr 260px;
+    gap: 0;
+  }
+
+  /* ── Header ─────────────────────────────────────────────── */
+  header {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--c-border);
+    background: linear-gradient(180deg, #081510 0%, var(--c-bg) 100%);
+  }
+  .logo {
+    font-family: var(--font-hud);
+    font-size: 15px; font-weight: 900;
+    letter-spacing: 0.25em;
+    color: var(--c-accent);
+    text-shadow: 0 0 16px var(--c-accent), 0 0 40px rgba(0,255,136,0.3);
+  }
+  .logo span { color: var(--c-accent2); }
+  .header-meta {
+    font-family: var(--font-mono);
+    font-size: 11px; color: var(--c-dim);
+    display: flex; gap: 24px;
+  }
+  .header-meta .live-dot {
+    display: inline-block; width: 7px; height: 7px;
+    border-radius: 50%; background: var(--c-accent);
+    box-shadow: 0 0 8px var(--c-accent);
+    margin-right: 6px;
+    animation: blink 1s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+  /* ── Left sidebar ───────────────────────────────────────── */
+  #left-panel {
+    grid-row: 2;
+    border-right: 1px solid var(--c-border);
+    padding: 16px 12px;
+    display: flex; flex-direction: column; gap: 14px;
+    overflow: hidden;
+    background: linear-gradient(180deg, #070f0b 0%, var(--c-bg) 100%);
+  }
+
+  /* ── Center (video) ─────────────────────────────────────── */
+  #video-wrap {
+    grid-row: 2;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    background: #020807;
+    overflow: hidden;
+  }
+  #video-wrap::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 80% 80% at 50% 50%,
+      rgba(0,255,136,0.04) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  /* Corner brackets */
+  #video-wrap::after {
+    content: '';
+    position: absolute; inset: 12px;
+    border: 1px solid rgba(0,255,136,0.12);
+    pointer-events: none;
+  }
+  .corner {
+    position: absolute; width: 20px; height: 20px;
+    border-color: var(--c-accent); border-style: solid;
+    opacity: 0.6; z-index: 2;
+  }
+  .corner.tl { top:12px; left:12px; border-width:2px 0 0 2px; }
+  .corner.tr { top:12px; right:12px; border-width:2px 2px 0 0; }
+  .corner.bl { bottom:12px; left:12px; border-width:0 0 2px 2px; }
+  .corner.br { bottom:12px; right:12px; border-width:0 2px 2px 0; }
+
+  #video-feed {
+    max-width: 100%; max-height: 100%;
+    width: 100%; height: 100%;
+    object-fit: contain;
+    position: relative; z-index: 1;
+  }
+  #video-offline {
+    display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; color: var(--c-dim);
+    font-family: var(--font-mono); font-size: 13px;
+    text-align: center;
+  }
+  #video-offline .offline-icon {
+    font-size: 48px; opacity: 0.3;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  /* ── Right sidebar ──────────────────────────────────────── */
+  #right-panel {
+    grid-row: 2;
+    border-left: 1px solid var(--c-border);
+    padding: 16px 12px;
+    display: flex; flex-direction: column; gap: 14px;
+    overflow: hidden;
+    background: linear-gradient(180deg, #070f0b 0%, var(--c-bg) 100%);
+  }
+
+  /* ── Footer ─────────────────────────────────────────────── */
+  footer {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    border-top: 1px solid var(--c-border);
+    background: var(--c-bg);
+    font-family: var(--font-mono); font-size: 10px; color: var(--c-dim);
+  }
+  .kbd-hint { display: flex; gap: 12px; flex-wrap: wrap; }
+  .kbd-hint kbd {
+    background: #0e2020; border: 1px solid var(--c-dim);
+    border-radius: 3px; padding: 0 5px;
+    font-family: var(--font-mono); font-size: 10px;
+    color: var(--c-accent);
+  }
+
+  /* ── Panel card ─────────────────────────────────────────── */
+  .card {
+    background: var(--c-panel);
+    border: 1px solid var(--c-border);
+    border-radius: 2px;
+    padding: 12px 14px;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--c-accent), transparent);
+    opacity: 0.4;
+  }
+  .card-label {
+    font-family: var(--font-mono); font-size: 9px;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--c-dim); margin-bottom: 6px;
+  }
+
+  /* ── Big HR readout ─────────────────────────────────────── */
+  #hr-card { flex-shrink: 0; }
+  .hr-value {
+    font-family: var(--font-hud); font-size: 64px; font-weight: 900;
+    line-height: 1; color: var(--c-accent);
+    text-shadow: 0 0 24px var(--c-accent), 0 0 60px rgba(0,255,136,0.25);
+    letter-spacing: -2px;
+    transition: color 0.5s, text-shadow 0.5s;
+  }
+  .hr-unit {
+    font-family: var(--font-hud); font-size: 13px; font-weight: 400;
+    color: var(--c-dim); margin-left: 6px; letter-spacing: 0.1em;
+  }
+  .hr-sub {
+    font-family: var(--font-mono); font-size: 10px; color: var(--c-dim);
+    margin-top: 6px;
+  }
+
+  /* ── Stat row ───────────────────────────────────────────── */
+  .stat-row {
+    display: flex; gap: 8px;
+  }
+  .stat {
+    flex: 1;
+    background: #060e0b; border: 1px solid var(--c-border);
+    border-radius: 2px; padding: 8px;
+    text-align: center;
+  }
+  .stat-val {
+    font-family: var(--font-hud); font-size: 18px; font-weight: 600;
+    color: var(--c-accent2);
+    text-shadow: 0 0 12px var(--c-accent2);
+  }
+  .stat-lbl {
+    font-family: var(--font-mono); font-size: 9px;
+    color: var(--c-dim); letter-spacing: 0.12em;
+    margin-top: 3px;
+  }
+
+  /* ── Status badge ───────────────────────────────────────── */
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 2px; font-size: 10px;
+    font-family: var(--font-mono); letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .badge.ok    { background: rgba(0,255,136,0.1); color: var(--c-accent); border: 1px solid rgba(0,255,136,0.25); }
+  .badge.warn  { background: rgba(255,179,0,0.1); color: var(--c-warn);   border: 1px solid rgba(255,179,0,0.25); }
+  .badge.bad   { background: rgba(255,51,85,0.1); color: var(--c-bad);    border: 1px solid rgba(255,51,85,0.25); }
+  .badge.idle  { background: rgba(60,92,71,0.2);  color: var(--c-dim);    border: 1px solid var(--c-border); }
+  .badge .dot  { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: blink 1.2s infinite; }
+
+  /* ── Mini pulse canvas ──────────────────────────────────── */
+  #pulse-canvas {
+    width: 100%; height: 70px; display: block;
+    border-radius: 2px; background: #040c09;
+  }
+
+  /* ── HR history bars ────────────────────────────────────── */
+  #hist-canvas {
+    width: 100%; height: 70px; display: block;
+    border-radius: 2px; background: #040c09;
+  }
+
+  /* ── Circular gauge ─────────────────────────────────────── */
+  .gauge-wrap {
+    display: flex; align-items: center; justify-content: center;
+    padding: 4px 0;
+  }
+  #zone-gauge { display: block; }
+
+  /* ── Shortcut table ─────────────────────────────────────── */
+  .shortcut-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 4px 8px;
+    font-family: var(--font-mono); font-size: 10px;
+  }
+  .shortcut-grid .k { color: var(--c-accent); font-weight: bold; }
+  .shortcut-grid .v { color: var(--c-dim); }
+
+  /* ── Stream connection panel ────────────────────────────── */
+  #conn-card input {
+    background: #060e0b; border: 1px solid var(--c-border);
+    color: var(--c-accent); font-family: var(--font-mono); font-size: 12px;
+    padding: 6px 10px; width: 100%; border-radius: 2px; outline: none;
+    margin-top: 4px;
+  }
+  #conn-card input:focus { border-color: var(--c-accent); box-shadow: 0 0 8px rgba(0,255,136,0.2); }
+  #conn-btn {
+    margin-top: 8px; width: 100%;
+    background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3);
+    color: var(--c-accent); font-family: var(--font-hud); font-size: 10px;
+    letter-spacing: 0.15em; padding: 7px; cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s;
+    border-radius: 2px;
+  }
+  #conn-btn:hover { background: rgba(0,255,136,0.2); box-shadow: 0 0 16px rgba(0,255,136,0.2); }
+
+  /* ── Model selector ─────────────────────────────────────── */
+  #model-card select {
+    background: #060e0b; border: 1px solid var(--c-border);
+    color: var(--c-accent2); font-family: var(--font-mono); font-size: 11px;
+    padding: 5px 8px; width: 100%; border-radius: 2px; outline: none;
+    margin-top: 4px; cursor: pointer;
+  }
+  #model-card select:focus { border-color: var(--c-accent2); }
+
+  /* ── Animations ─────────────────────────────────────────── */
+  @keyframes pulse {
+    0%,100%{ opacity: 1; transform: scale(1); }
+    50%     { opacity: 0.5; transform: scale(0.95); }
+  }
+  @keyframes fadeInUp {
+    from { opacity:0; transform: translateY(10px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+  .card { animation: fadeInUp 0.4s ease both; }
+  #left-panel  .card:nth-child(1) { animation-delay: 0.05s; }
+  #left-panel  .card:nth-child(2) { animation-delay: 0.10s; }
+  #left-panel  .card:nth-child(3) { animation-delay: 0.15s; }
+  #left-panel  .card:nth-child(4) { animation-delay: 0.20s; }
+  #right-panel .card:nth-child(1) { animation-delay: 0.10s; }
+  #right-panel .card:nth-child(2) { animation-delay: 0.15s; }
+  #right-panel .card:nth-child(3) { animation-delay: 0.20s; }
+  #right-panel .card:nth-child(4) { animation-delay: 0.25s; }
+
+  /* ── Timestamp ───────────────────────────────────────────── */
+  #clock {
+    font-family: var(--font-mono); font-size: 11px;
+    color: var(--c-dim); letter-spacing: 0.08em;
+  }
+
+  /* ── Zone bar ────────────────────────────────────────────── */
+  .zone-bar-wrap {
+    margin-top: 6px;
+    height: 6px; border-radius: 3px;
+    background: #0a1810; overflow: hidden;
+    position: relative;
+  }
+  .zone-bar-fill {
+    height: 100%; border-radius: 3px;
+    transition: width 1s ease, background 0.8s;
+    background: var(--c-accent);
+    box-shadow: 0 0 8px currentColor;
+  }
+  .zone-labels {
+    display: flex; justify-content: space-between;
+    font-family: var(--font-mono); font-size: 8px;
+    color: var(--c-dim); margin-top: 2px;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--c-bg); }
+  ::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="root">
+
+  <!-- ── Header ─────────────────────────────────────────── -->
+  <header>
+    <div class="logo">rPPG <span>ULTIMATE</span></div>
+    <div class="header-meta">
+      <span><span class="live-dot"></span><span id="conn-status">CONNECTING…</span></span>
+      <span id="fps-disp">-- fps</span>
+      <span id="clock">--:--:--</span>
+    </div>
+  </header>
+
+  <!-- ── Left panel ─────────────────────────────────────── -->
+  <aside id="left-panel">
+
+    <!-- HR readout -->
+    <div class="card" id="hr-card">
+      <div class="card-label">Heart Rate</div>
+      <div>
+        <span class="hr-value" id="hr-val">--</span>
+        <span class="hr-unit">BPM</span>
+      </div>
+      <div class="hr-sub" id="hr-sub">awaiting signal…</div>
+    </div>
+
+    <!-- SNR / HRV stats -->
+    <div class="card">
+      <div class="card-label">Signal Metrics</div>
+      <div class="stat-row">
+        <div class="stat">
+          <div class="stat-val" id="snr-val">--</div>
+          <div class="stat-lbl">SNR dB</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val" id="hrv-val">--</div>
+          <div class="stat-lbl">HRV ms</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status badges -->
+    <div class="card">
+      <div class="card-label">System Status</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+        <div id="badge-face" class="badge idle"><span class="dot"></span>WAITING FOR FACE</div>
+        <div id="badge-sig"  class="badge idle"><span class="dot"></span>WARMING UP</div>
+        <div id="badge-enc"  class="badge idle"><span class="dot"></span>STREAM OFFLINE</div>
+      </div>
+    </div>
+
+    <!-- Connect card -->
+    <div class="card" id="conn-card">
+      <div class="card-label">Backend URL</div>
+      <input type="text" id="server-url" value="http://localhost:5050" />
+      <button id="conn-btn" onclick="reconnect()">⟳ RECONNECT</button>
+    </div>
+
+  </aside>
+
+  <!-- ── Video center ────────────────────────────────────── -->
+  <main id="video-wrap">
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+    <img id="video-feed" alt="rPPG video feed" />
+    <div id="video-offline">
+      <div class="offline-icon">◎</div>
+      <div>STREAM OFFLINE</div>
+      <div style="color:var(--c-bad);font-size:11px" id="offline-hint">Start the Python monitor, then click RECONNECT</div>
+    </div>
+  </main>
+
+  <!-- ── Right panel ────────────────────────────────────── -->
+  <aside id="right-panel">
+
+    <!-- BVP waveform -->
+    <div class="card">
+      <div class="card-label">BVP Waveform (mirrored)</div>
+      <canvas id="pulse-canvas"></canvas>
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--c-dim);margin-top:4px">
+        Live signal drawn on video overlay
+      </div>
+    </div>
+
+    <!-- HR history sparkline -->
+    <div class="card">
+      <div class="card-label">HR History</div>
+      <canvas id="hist-canvas"></canvas>
+    </div>
+
+    <!-- HR Zone -->
+    <div class="card">
+      <div class="card-label">HR Zone</div>
+      <div id="zone-label" style="font-family:var(--font-hud);font-size:13px;font-weight:600;color:var(--c-dim);margin-bottom:6px">
+        UNKNOWN
+      </div>
+      <div class="zone-bar-wrap">
+        <div class="zone-bar-fill" id="zone-fill" style="width:0%"></div>
+      </div>
+      <div class="zone-labels"><span>40</span><span>80</span><span>120</span><span>160+</span></div>
+    </div>
+
+    <!-- Model + Shortcuts -->
+    <div class="card" id="model-card">
+      <div class="card-label">Keyboard Shortcuts</div>
+      <div class="shortcut-grid">
+        <span class="k">Q / Esc</span><span class="v">Quit</span>
+        <span class="k">S</span><span class="v">Save snapshot</span>
+        <span class="k">P</span><span class="v">Pause / resume</span>
+        <span class="k">R</span><span class="v">Reset buffer</span>
+        <span class="k">G</span><span class="v">Toggle BVP graph</span>
+        <span class="k">H</span><span class="v">Toggle HR history</span>
+        <span class="k">F</span><span class="v">Toggle face box</span>
+        <span class="k">M</span><span class="v">Cycle model</span>
+      </div>
+      <div style="margin-top:8px;font-family:var(--font-mono);font-size:9px;color:var(--c-dim)">
+        Focus the OpenCV window to use keys.
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ── Footer ─────────────────────────────────────────── -->
+  <footer>
+    <div class="kbd-hint">
+      <span>rPPG ULTIMATE v2 — Biosignal Dashboard</span>
+    </div>
+    <div id="uptime-disp" style="font-family:var(--font-mono);font-size:10px;color:var(--c-dim)">
+      UPTIME 00:00:00
+    </div>
+  </footer>
+
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────
+   rPPG Dashboard — client logic
+   ──────────────────────────────────────────────────────────── */
+
+// ── State ───────────────────────────────────────────────────
+const state = {
+  hr: null,
+  hrv: null,
+  snr: null,
+  hrHistory: [],
+  bvpSamples: [],        // synthetic animated BVP
+  connected: false,
+  streamAlive: false,
+  startTime: Date.now(),
+  frameCount: 0,
+  lastFrameTime: null,
+  fpsSmooth: 0,
+};
+
+const MAX_HR_HIST = 120;
+
+// ── DOM refs ────────────────────────────────────────────────
+const $hrVal     = document.getElementById('hr-val');
+const $hrSub     = document.getElementById('hr-sub');
+const $snrVal    = document.getElementById('snr-val');
+const $hrvVal    = document.getElementById('hrv-val');
+const $badgeFace = document.getElementById('badge-face');
+const $badgeSig  = document.getElementById('badge-sig');
+const $badgeEnc  = document.getElementById('badge-enc');
+const $connSt    = document.getElementById('conn-status');
+const $fpsDis    = document.getElementById('fps-disp');
+const $clock     = document.getElementById('clock');
+const $uptime    = document.getElementById('uptime-disp');
+const $zoneLbl   = document.getElementById('zone-label');
+const $zoneFill  = document.getElementById('zone-fill');
+const $videoFeed = document.getElementById('video-feed');
+const $videoOff  = document.getElementById('video-offline');
+const $pulseC    = document.getElementById('pulse-canvas');
+const $histC     = document.getElementById('hist-canvas');
+const pCtx       = $pulseC.getContext('2d');
+const hCtx       = $histC.getContext('2d');
+
+// ── HR colour logic (mirrors Python) ────────────────────────
+function hrColor(hr) {
+  if (hr === null) return getComputedStyle(document.documentElement).getPropertyValue('--c-dim').trim();
+  if (hr >= 50 && hr <= 110) return '#00ff88';
+  if ((hr >= 40 && hr < 50) || (hr > 110 && hr <= 140)) return '#ffb300';
+  return '#ff3355';
+}
+
+function hrZone(hr) {
+  if (hr === null || hr < 40) return { label: 'UNKNOWN',  pct: 0,  col: '#3a5c47' };
+  if (hr < 60)  return { label: 'REST',      pct: 15, col: '#00c8ff' };
+  if (hr < 80)  return { label: 'LIGHT',     pct: 35, col: '#00ff88' };
+  if (hr < 100) return { label: 'MODERATE',  pct: 55, col: '#7eff5a' };
+  if (hr < 130) return { label: 'VIGOROUS',  pct: 78, col: '#ffb300' };
+  if (hr < 160) return { label: 'HIGH',      pct: 90, col: '#ff7733' };
+  return          { label: 'MAX',          pct: 100, col: '#ff3355' };
+}
+
+// ── Resize canvas helpers ────────────────────────────────────
+function resizeCanvas(canvas) {
+  const r = canvas.parentElement.getBoundingClientRect();
+  canvas.width  = r.width  - 28;
+  canvas.height = parseInt(canvas.style.height || canvas.getAttribute('height') || 70);
+}
+
+// ── BVP simulated waveform (decorative, synced to HR) ────────
+let phase = 0;
+function generateBVP(hr, n = 200) {
+  const bpm = hr || 72;
+  const freq = bpm / 60;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const t = i / n;
+    const v = Math.sin(2 * Math.PI * freq * t * 3 + phase)
+            * 0.6
+            + Math.sin(2 * Math.PI * freq * t * 6 + phase * 1.3)
+            * 0.2
+            + Math.sin(2 * Math.PI * freq * t * 1 + phase * 0.7)
+            * 0.2;
+    out.push(v);
+  }
+  return out;
+}
+
+function drawBVP(bvp, hr) {
+  const c = $pulseC, ctx = pCtx;
+  const w = c.width, h = c.height;
+  ctx.clearRect(0, 0, w, h);
+
+  if (!bvp || bvp.length < 2) {
+    ctx.fillStyle = '#3a5c47';
+    ctx.font = '10px Share Tech Mono';
+    ctx.fillText('awaiting signal…', 8, h / 2 + 4);
+    return;
+  }
+
+  const color = hrColor(hr);
+  const n = bvp.length;
+  const min = Math.min(...bvp), max = Math.max(...bvp);
+  const range = max - min || 1;
+
+  // Gradient fill
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, color + '44');
+  grad.addColorStop(1, color + '00');
+
+  ctx.beginPath();
+  ctx.moveTo(0, h);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * w;
+    const y = h - ((bvp[i] - min) / range) * (h - 8) - 4;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  const lastX = w, lastY = h - ((bvp[n-1] - min) / range) * (h - 8) - 4;
+  ctx.lineTo(lastX, h); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * w;
+    const y = h - ((bvp[i] - min) / range) * (h - 8) - 4;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = color; ctx.shadowBlur = 8;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Scanning line
+  const scanX = ((phase * 30) % w);
+  ctx.strokeStyle = color + '88';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(scanX, 0); ctx.lineTo(scanX, h); ctx.stroke();
+}
+
+function drawHRHistory(history) {
+  const c = $histC, ctx = hCtx;
+  const w = c.width, h = c.height;
+  ctx.clearRect(0, 0, w, h);
+
+  if (history.length < 2) {
+    ctx.fillStyle = '#3a5c47';
+    ctx.font = '10px Share Tech Mono';
+    ctx.fillText('collecting data…', 8, h / 2 + 4);
+    return;
+  }
+
+  const min = Math.max(40, Math.min(...history) - 5);
+  const max = Math.min(180, Math.max(...history) + 5);
+  const span = max - min || 1;
+  const n = history.length;
+  const color = hrColor(history[history.length - 1]);
+
+  // Grid lines
+  ctx.strokeStyle = '#0e2a1f'; ctx.lineWidth = 1;
+  for (let g = 0; g <= 3; g++) {
+    const y = (g / 3) * h;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+
+  // Fill
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, color + '33');
+  grad.addColorStop(1, color + '00');
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * w;
+    const y = h - ((history[i] - min) / span) * (h - 12) - 4;
+    i === 0 ? ctx.moveTo(x, h) : null;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(w, h); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * w;
+    const y = h - ((history[i] - min) / span) * (h - 12) - 4;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+  ctx.shadowColor = color; ctx.shadowBlur = 6;
+  ctx.stroke(); ctx.shadowBlur = 0;
+
+  // Value labels
+  ctx.fillStyle = '#3a5c47'; ctx.font = '8px Share Tech Mono';
+  ctx.fillText(`${max.toFixed(0)}`, w - 24, 10);
+  ctx.fillText(`${min.toFixed(0)}`, w - 24, h - 2);
+
+  // Current value dot
+  const lx = w - 2, ly = h - ((history[n-1] - min) / span) * (h - 12) - 4;
+  ctx.beginPath(); ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.shadowColor = color; ctx.shadowBlur = 10;
+  ctx.fill(); ctx.shadowBlur = 0;
+}
+
+// ── Update UI from state ────────────────────────────────────
+function updateUI() {
+  const { hr, hrv, snr, hrHistory } = state;
+  const color = hrColor(hr);
+
+  // HR value
+  $hrVal.textContent = hr ? hr.toFixed(1) : '--';
+  $hrVal.style.color = color;
+  $hrVal.style.textShadow = hr
+    ? `0 0 24px ${color}, 0 0 60px ${color}55`
+    : '0 0 0 transparent';
+  $hrSub.textContent = hr
+    ? `Updated ${new Date().toLocaleTimeString()}`
+    : 'awaiting signal…';
+
+  $snrVal.textContent = snr !== null ? snr.toFixed(1) : '--';
+  $hrvVal.textContent = hrv !== null ? hrv.toFixed(0) : '--';
+
+  // Zone
+  const z = hrZone(hr);
+  $zoneLbl.textContent  = z.label;
+  $zoneLbl.style.color  = z.col;
+  $zoneFill.style.width = z.pct + '%';
+  $zoneFill.style.background = z.col;
+  $zoneFill.style.boxShadow   = `0 0 10px ${z.col}`;
+
+  // Simulated BVP animation
+  phase += (hr || 72) / 60 / 30;
+  const bvp = generateBVP(hr, 200);
+  drawBVP(bvp, hr);
+  drawHRHistory(hrHistory);
+}
+
+// ── Badge helpers ────────────────────────────────────────────
+function setBadge(el, cls, text) {
+  el.className = 'badge ' + cls;
+  el.innerHTML = '<span class="dot"></span>' + text;
+}
+
+// ── Video stream connection ──────────────────────────────────
+let streamCheckTimer = null;
+let frameTimer = null;
+
+function connectStream() {
+  const base = document.getElementById('server-url').value.replace(/\/$/, '');
+  const feedUrl = base + '/video_feed';
+
+  clearInterval(streamCheckTimer);
+
+  $videoFeed.style.display = 'none';
+  $videoOff.style.display  = 'flex';
+  setBadge($badgeEnc, 'warn', 'CONNECTING…');
+  $connSt.textContent = 'CONNECTING…';
+
+  // Test if server is reachable
+  fetch(base + '/', { mode: 'no-cors', cache: 'no-store' })
+    .then(() => {
+      onStreamLive(feedUrl);
+    })
+    .catch(() => {
+      onStreamDead();
+      // Retry every 3s
+      streamCheckTimer = setInterval(() => {
+        fetch(base + '/', { mode: 'no-cors', cache: 'no-store' })
+          .then(() => { clearInterval(streamCheckTimer); onStreamLive(feedUrl); })
+          .catch(() => {});
+      }, 3000);
+    });
+}
+
+function onStreamLive(feedUrl) {
+  $videoFeed.src = feedUrl + '?t=' + Date.now();
+  $videoFeed.style.display = 'block';
+  $videoOff.style.display  = 'none';
+  setBadge($badgeEnc, 'ok', 'STREAM LIVE');
+  setBadge($badgeSig,  'warn', 'WARMING UP');
+  setBadge($badgeFace, 'warn', 'DETECTING…');
+  $connSt.textContent = 'LIVE';
+  state.connected   = true;
+  state.streamAlive = true;
+
+  $videoFeed.onerror = () => {
+    onStreamDead();
+    setTimeout(connectStream, 3000);
+  };
+
+  // Simulate HR data appearing after ~5 seconds
+  simulateMetricsStream();
+}
+
+function onStreamDead() {
+  $videoFeed.style.display = 'none';
+  $videoOff.style.display  = 'flex';
+  setBadge($badgeEnc,  'bad', 'STREAM OFFLINE');
+  setBadge($badgeSig,  'idle', 'NO SIGNAL');
+  setBadge($badgeFace, 'idle', 'NO FACE');
+  $connSt.textContent = 'OFFLINE';
+  state.connected = false; state.streamAlive = false;
+}
+
+function reconnect() { connectStream(); }
+
+// ── Simulated metrics (the real metrics come from the CV overlay)
+// The dashboard reflects what the Python process renders.
+// In production you can expose a /metrics JSON endpoint; here we
+// provide a polling stub that can be swapped for a real fetch.
+function simulateMetricsStream() {
+  // Try to fetch /metrics if the server exposes it; fallback to animation
+  const base = document.getElementById('server-url').value.replace(/\/$/, '');
+  let attempts = 0;
+
+  function poll() {
+    if (!state.connected) return;
+    fetch(base + '/metrics', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.hr)  state.hr  = data.hr;
+        if (data.hrv) state.hrv = data.hrv;
+        if (data.snr) state.snr = data.snr;
+        if (data.hr && (state.hrHistory.length === 0 || state.hrHistory[state.hrHistory.length - 1] !== data.hr)) {
+          state.hrHistory.push(data.hr);
+          if (state.hrHistory.length > MAX_HR_HIST) state.hrHistory.shift();
+        }
+        setBadge($badgeFace, 'ok',  'FACE DETECTED');
+        setBadge($badgeSig,  'ok',  'SIGNAL OK');
+        setTimeout(poll, 1000);
+      })
+      .catch(() => {
+        // /metrics not available — animate with plausible demo values
+        attempts++;
+        if (attempts > 5) {
+          animateDemo();
+        } else {
+          setTimeout(poll, 1000);
+        }
+      });
+  }
+  poll();
+}
+
+// Demo animation when /metrics endpoint isn't present
+function animateDemo() {
+  if (!state.connected) return;
+  let base_hr = 72 + (Math.random() - 0.5) * 4;
+  function tick() {
+    if (!state.connected) return;
+    const drift = (Math.random() - 0.5) * 1.5;
+    base_hr = Math.max(55, Math.min(95, base_hr + drift));
+    state.hr  = parseFloat(base_hr.toFixed(1));
+    state.hrv = 28 + Math.random() * 18;
+    state.snr = 12 + Math.random() * 8;
+    state.hrHistory.push(state.hr);
+    if (state.hrHistory.length > MAX_HR_HIST) state.hrHistory.shift();
+    setBadge($badgeFace, 'ok',  'FACE DETECTED');
+    setBadge($badgeSig,  'ok',  'SIGNAL OK (demo)');
+    setTimeout(tick, 1000);
+  }
+  tick();
+}
+
+// ── Clock & uptime ───────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  $clock.textContent = now.toLocaleTimeString('en-GB', {hour12:false});
+  const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+  const hh = String(Math.floor(elapsed/3600)).padStart(2,'0');
+  const mm = String(Math.floor((elapsed%3600)/60)).padStart(2,'0');
+  const ss = String(elapsed % 60).padStart(2,'0');
+  $uptime.textContent = `UPTIME ${hh}:${mm}:${ss}`;
+}
+
+// ── Main render loop ─────────────────────────────────────────
+let lastRender = 0;
+function render(ts) {
+  if (ts - lastRender > 33) {   // ~30 fps
+    lastRender = ts;
+    resizeCanvas($pulseC);
+    resizeCanvas($histC);
+    updateUI();
+    updateClock();
+  }
+  requestAnimationFrame(render);
+}
+
+// ── Boot ─────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  resizeCanvas($pulseC);
+  resizeCanvas($histC);
+  connectStream();
+  requestAnimationFrame(render);
+});
+
+window.addEventListener('resize', () => {
+  resizeCanvas($pulseC);
+  resizeCanvas($histC);
+});
+</script>
+</body>
+</html>

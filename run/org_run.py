@@ -75,3 +75,4 @@ model = rppg.Model('PhysMamba.pure')
 # EfficientPhys -> Self-attention variant of TSCAN -> WACV 2023
 # PhysNet -> 3D Convolutional Encoder-Decoder -> BMVC 2019
 # FacePhys -> Optimized state-space model -> - 
+

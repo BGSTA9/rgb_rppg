@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>rPPG · Ultimate — Live Telemetry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" />
+
+<style>
+  :root {
+    --bg-0:        #0b0d10;
+    --bg-1:        #11141a;
+    --bg-2:        #161a22;
+    --panel:       #1a1f29;
+    --panel-edge:  #232a36;
+    --ink:         #e8ecf2;
+    --ink-dim:     #8b94a3;
+    --ink-faint:   #4a5260;
+    --accent:      #60e860;   /* matches C_ACCENT in run4.py */
+    --accent-soft: #60e86022;
+    --warn:        #ffc83c;
+    --bad:         #f04848;
+    --bvp:         #ffb450;
+    --grid:        #1d232c;
+    --radius:      14px;
+    --radius-sm:   8px;
+    --shadow:      0 1px 0 #ffffff08 inset, 0 12px 40px -12px #000000aa;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-weight: 400;
+    color: var(--ink);
+    background: var(--bg-0);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ── Background: subtle ECG grid + drifting glow ──────────────────── */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 48px 48px, 48px 48px;
+    background-position: -1px -1px;
+    mask-image: radial-gradient(ellipse at 50% 35%, #000 30%, transparent 80%);
+    opacity: .35;
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::after {
+    content: "";
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(900px 500px at 18% 12%, #60e86012, transparent 60%),
+      radial-gradient(700px 500px at 85% 88%, #ffb45010, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── App shell ────────────────────────────────────────────────────── */
+  .app {
+    position: relative;
+    z-index: 1;
+    height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    padding: 22px 28px 18px;
+    gap: 18px;
+  }
+
+  /* ── Header ───────────────────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    user-select: none;
+  }
+  .brand .logomark {
+    width: 28px; height: 28px;
+    align-self: center;
+    color: var(--accent);
+    filter: drop-shadow(0 0 8px var(--accent-soft));
+  }
+  .brand h1 {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 30px;
+    margin: 0;
+    letter-spacing: .2px;
+  }
+  .brand h1 em {
+    font-style: normal;
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500;
+    font-size: 14px;
+    margin-left: 6px;
+    padding: 3px 8px;
+    border: 1px solid var(--accent-soft);
+    border-radius: 999px;
+    vertical-align: middle;
+    text-transform: uppercase;
+    letter-spacing: 1.4px;
+  }
+  .brand small {
+    color: var(--ink-faint);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .header-meta {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    font-size: 12px;
+  }
+  .meta-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+  .meta-item .k {
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: 1.6px;
+    font-size: 9.5px;
+  }
+  .meta-item .v {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+  }
+
+  /* ── Connection pill with pulsing heart ───────────────────────────── */
+  .conn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 14px 7px 11px;
+    border: 1px solid var(--panel-edge);
+    border-radius: 999px;
+    background: linear-gradient(180deg, #ffffff04, #00000018);
+    font-size: 11.5px;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+  .conn[data-state="ok"]   { color: var(--accent); border-color: #2c4a2c; }
+  .conn[data-state="wait"] { color: var(--warn);   border-color: #4a3e1f; }
+  .conn[data-state="bad"]  { color: var(--bad);    border-color: #4a2a2a; }
+  .conn .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 0 currentColor;
+    animation: heartbeat 1.4s ease-in-out infinite;
+  }
+  .conn[data-state="bad"] .dot { animation: none; }
+  @keyframes heartbeat {
+    0%, 70%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+    35%           { box-shadow: 0 0 0 7px transparent; opacity: .55; }
+  }
+
+  /* ── Main grid: video + side ──────────────────────────────────────── */
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 18px;
+    min-height: 0;
+  }
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; }
+    .side { display: none; }
+  }
+
+  /* ── Video panel ──────────────────────────────────────────────────── */
+  .video-frame {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+  }
+  .video-frame::before {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(180deg, #ffffff05 0%, transparent 12%, transparent 88%, #00000035 100%);
+    pointer-events: none;
+    z-index: 2;
+  }
+  /* Corner brackets — instrument framing */
+  .corner {
+    position: absolute;
+    width: 18px; height: 18px;
+    border: 1px solid var(--accent);
+    opacity: .55;
+    pointer-events: none;
+    z-index: 3;
+  }
+  .corner.tl { top: 10px;    left: 10px;    border-right: 0; border-bottom: 0; }
+  .corner.tr { top: 10px;    right: 10px;   border-left:  0; border-bottom: 0; }
+  .corner.bl { bottom: 10px; left: 10px;    border-right: 0; border-top:    0; }
+  .corner.br { bottom: 10px; right: 10px;   border-left:  0; border-top:    0; }
+
+  #stream {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    display: block;
+    background: #000;
+    border-radius: 6px;
+    image-rendering: -webkit-optimize-contrast;
+  }
+  #stream.is-hidden { display: none; }
+
+  .stream-fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    z-index: 1;
+    color: var(--ink-dim);
+    font-size: 13px;
+    text-align: center;
+    padding: 24px;
+  }
+  .stream-fallback .spinner {
+    width: 28px; height: 28px;
+    border: 2px solid var(--panel-edge);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  .stream-fallback.is-hidden { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .video-toolbar {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    background: #0d1015cc;
+    border: 1px solid var(--panel-edge);
+    border-radius: 999px;
+    padding: 5px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 4;
+    opacity: 0;
+    transition: opacity .22s ease;
+  }
+  .video-frame:hover .video-toolbar { opacity: 1; }
+  .video-toolbar button {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: var(--ink-dim);
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .video-toolbar button:hover {
+    background: #ffffff0c;
+    color: var(--ink);
+  }
+  .video-toolbar button.is-primary { color: var(--accent); }
+
+  /* ── Side panel ───────────────────────────────────────────────────── */
+  .side {
+    display: grid;
+    grid-template-rows: auto auto auto 1fr;
+    gap: 14px;
+    min-height: 0;
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    box-shadow: var(--shadow);
+  }
+  .card h3 {
+    margin: 0 0 12px;
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 17px;
+    color: var(--ink);
+    letter-spacing: .3px;
+  }
+  .card h3::before {
+    content: "—";
+    color: var(--accent);
+    margin-right: 8px;
+    font-style: normal;
+  }
+
+  .legend {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    font-size: 12px;
+  }
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+  }
+  .legend-row .swatch {
+    width: 22px; height: 6px;
+    border-radius: 2px;
+  }
+  .legend-row .label   { color: var(--ink); flex: 0 0 auto; }
+  .legend-row .range   { color: var(--ink-faint); margin-left: auto; font-size: 11px; }
+  .swatch.s-good { background: var(--accent); box-shadow: 0 0 8px var(--accent-soft); }
+  .swatch.s-warn { background: var(--warn);  }
+  .swatch.s-bad  { background: var(--bad);   }
+  .swatch.s-dim  { background: var(--ink-faint); }
+
+  .keys {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    font-size: 12px;
+    color: var(--ink-dim);
+  }
+  .keys kbd {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    background: #0d1015;
+    border: 1px solid var(--panel-edge);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 2px 7px;
+    min-width: 22px;
+    text-align: center;
+    display: inline-block;
+  }
+  .keys span { color: var(--ink); }
+  .keys-note {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--panel-edge);
+    color: var(--ink-faint);
+    font-size: 10.5px;
+    line-height: 1.5;
+    letter-spacing: .3px;
+  }
+
+  .about {
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--ink-dim);
+  }
+  .about strong { color: var(--ink); font-weight: 500; }
+  .about .accent { color: var(--accent); }
+  .about p { margin: 0 0 8px; }
+  .about p:last-child { margin: 0; }
+
+  /* ── Footer ───────────────────────────────────────────────────────── */
+  footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--ink-faint);
+    font-size: 10.5px;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+    padding: 0 4px;
+  }
+  footer .dots {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+  }
+  footer .dots i {
+    display: block;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--ink-faint);
+  }
+  footer .dots i.live { background: var(--accent); animation: heartbeat 1.4s ease-in-out infinite; }
+
+  /* ── Reduced motion ───────────────────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    .conn .dot, footer .dots i.live, .stream-fallback .spinner { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ─── HEADER ─────────────────────────────────────────────────────── -->
+  <header>
+    <div class="brand">
+      <!-- pulse / heart logomark -->
+      <svg class="logomark" viewBox="0 0 32 32" fill="none" stroke="currentColor"
+           stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 16 H8 L11 8 L16 24 L21 12 L24 16 H30" />
+      </svg>
+      <h1>rPPG <em>Ultimate</em></h1>
+      <small>remote photoplethysmography · live telemetry</small>
+    </div>
+
+    <div class="header-meta">
+      <div class="meta-item">
+        <span class="k">Source</span>
+        <span class="v" id="source">localhost:5050</span>
+      </div>
+      <div class="meta-item">
+        <span class="k">Uptime</span>
+        <span class="v" id="uptime">00:00:00</span>
+      </div>
+      <div class="conn" id="conn" data-state="wait">
+        <span class="dot"></span>
+        <span id="conn-text">connecting</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ─── MAIN ───────────────────────────────────────────────────────── -->
+  <main>
+
+    <!-- video panel ----------------------------------------------------- -->
+    <div class="video-frame" id="frame">
+      <span class="corner tl"></span>
+      <span class="corner tr"></span>
+      <span class="corner bl"></span>
+      <span class="corner br"></span>
+
+      <div class="video-toolbar">
+        <button id="btn-reload" class="is-primary" title="Reconnect to /video_feed">Reconnect</button>
+        <button id="btn-fs"     title="Toggle fullscreen">Fullscreen</button>
+      </div>
+
+      <div class="stream-fallback" id="fallback">
+        <div class="spinner"></div>
+        <div id="fallback-msg">Waiting for <span style="color:var(--accent)">/video_feed</span> …</div>
+        <div style="font-size:11px;color:var(--ink-faint);max-width:320px">
+          Make sure <code>run4.py</code> is running on this machine and has access to your camera.
+        </div>
+      </div>
+
+      <img id="stream" class="is-hidden" alt="rPPG live stream" />
+    </div>
+
+    <!-- side panel ------------------------------------------------------ -->
+    <aside class="side">
+
+      <section class="card">
+        <h3>Signal legend</h3>
+        <div class="legend">
+          <div class="legend-row">
+            <span class="swatch s-good"></span>
+            <span class="label">Normal</span>
+            <span class="range">50 – 110 BPM</span>
+          </div>
+          <div class="legend-row">
+            <span class="swatch s-warn"></span>
+            <span class="label">Edge</span>
+            <span class="range">40 – 50 · 110 – 140</span>
+          </div>
+          <div class="legend-row">
+            <span class="swatch s-bad"></span>
+            <span class="label">Out of range</span>
+            <span class="range">&lt; 40 · &gt; 140</span>
+          </div>
+          <div class="legend-row">
+            <span class="swatch s-dim"></span>
+            <span class="label">No signal</span>
+            <span class="range">warming up</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Keyboard</h3>
+        <div class="keys">
+          <kbd>Q</kbd><span>Quit monitor</span>
+          <kbd>S</kbd><span>Save snapshot + CSV</span>
+          <kbd>P</kbd><span>Pause / resume</span>
+          <kbd>R</kbd><span>Reset buffer</span>
+          <kbd>G</kbd><span>Toggle BVP graph</span>
+          <kbd>H</kbd><span>Toggle HR history</span>
+          <kbd>F</kbd><span>Toggle face box</span>
+          <kbd>M</kbd><span>Cycle model</span>
+        </div>
+        <div class="keys-note">
+          Shortcuts are handled by the OpenCV window opened by <code>run4.py</code>.
+          Focus that window for keys to register.
+        </div>
+      </section>
+
+      <section class="card about">
+        <h3>How this works</h3>
+        <p>
+          The browser doesn't open the camera. <strong>run4.py</strong> opens the
+          <strong>local webcam</strong> on the machine where it runs, processes frames
+          through the rPPG model, draws the HUD, and streams the result here as MJPEG.
+        </p>
+        <p style="color:var(--ink-faint);font-size:11.5px">
+          Heart rate · BVP waveform · HR history are all rendered <span class="accent">inside the video frame</span>.
+        </p>
+      </section>
+
+    </aside>
+  </main>
+
+  <!-- ─── FOOTER ─────────────────────────────────────────────────────── -->
+  <footer>
+    <span><span class="dots"><i class="live"></i><i></i><i></i></span> &nbsp; rPPG telemetry</span>
+    <span id="frames">— frames received</span>
+    <span>MJPEG · multipart/x-mixed-replace</span>
+  </footer>
+
+</div>
+
+<script>
+  // ─── Stream wiring ────────────────────────────────────────────────────
+  // When served by run4.py (http://…) we use a relative path so any device
+  // on the LAN can connect. When opened directly from disk (file://) the
+  // browser would otherwise resolve "/video_feed" against the filesystem,
+  // so we fall back to an explicit localhost URL.
+  const STREAM_BASE =
+    location.protocol === "file:" ? "http://localhost:5050" : "";
+  const STREAM_PATH      = STREAM_BASE + "/video_feed";
+  const RETRY_MS         = 1500;
+  const STALL_TIMEOUT_MS = 4000;   // if no progress for this long, reconnect
+
+  const img       = document.getElementById("stream");
+  const fallback  = document.getElementById("fallback");
+  const fbMsg     = document.getElementById("fallback-msg");
+  const conn      = document.getElementById("conn");
+  const connText  = document.getElementById("conn-text");
+  const uptimeEl  = document.getElementById("uptime");
+  const framesEl  = document.getElementById("frames");
+  const btnReload = document.getElementById("btn-reload");
+  const btnFs     = document.getElementById("btn-fs");
+  const frameRoot = document.getElementById("frame");
+  const sourceEl  = document.getElementById("source");
+
+  sourceEl.textContent = STREAM_BASE
+    ? new URL(STREAM_BASE).host
+    : (location.host || "localhost:5050");
+
+  let frameCount    = 0;
+  let lastProgress  = 0;
+  let errorStreak   = 0;
+  const pageStart   = Date.now();
+
+  function setState(state, label) {
+    conn.dataset.state = state;
+    connText.textContent = label;
+  }
+
+  function showFallback(msg) {
+    fbMsg.innerHTML = msg;
+    fallback.classList.remove("is-hidden");
+    img.classList.add("is-hidden");
+  }
+  function showStream() {
+    fallback.classList.add("is-hidden");
+    img.classList.remove("is-hidden");
+  }
+
+  function connect() {
+    setState("wait", "connecting");
+    showFallback('Waiting for <span style="color:var(--accent)">/video_feed</span> …');
+    // cache-bust so the browser re-opens the multipart connection cleanly
+    img.src = STREAM_PATH + "?t=" + Date.now();
+    lastProgress = Date.now();
+  }
+
+  // The <img> 'load' event fires after the FIRST frame of an MJPEG stream
+  // arrives. After that we rely on a periodic naturalWidth/heartbeat poll.
+  img.addEventListener("load", () => {
+    setState("ok", "live");
+    showStream();
+    errorStreak  = 0;
+    frameCount  += 1;
+    lastProgress = Date.now();
+    framesEl.textContent = frameCount.toLocaleString() + " frames";
+  });
+
+  img.addEventListener("error", () => {
+    errorStreak += 1;
+    setState("bad", "stream error");
+    if (errorStreak >= 2) {
+      // After repeated failures, surface the real likely causes.
+      const hostHint = STREAM_BASE
+        ? '<code>' + STREAM_BASE + '</code>'
+        : '<code>http://localhost:5050/</code>';
+      showFallback(
+        '<div style="color:var(--bad);font-weight:500;margin-bottom:6px">' +
+          'Can\u2019t reach the stream' +
+        '</div>' +
+        '<div style="font-size:11.5px;color:var(--ink-dim);max-width:380px;line-height:1.6">' +
+          'Tried ' + hostHint + ' but got nothing back. Check that:' +
+          '<ul style="text-align:left;margin:8px auto 0;padding-left:18px;color:var(--ink-faint)">' +
+            '<li><code>run4.py</code> is running on this machine</li>' +
+            '<li>You opened <code>http://localhost:5050/</code> (not the file directly)</li>' +
+            '<li>No other app is occupying port 5050</li>' +
+          '</ul>' +
+        '</div>'
+      );
+    } else {
+      showFallback("Stream dropped. Retrying in " + (RETRY_MS / 1000).toFixed(1) + "s \u2026");
+    }
+    setTimeout(connect, RETRY_MS);
+  });
+
+  // Stall watchdog: MJPEG decoding doesn't expose true per-frame events,
+  // so we poll naturalWidth and treat any change as progress. If we stop
+  // seeing changes for STALL_TIMEOUT_MS we reconnect.
+  let lastNW = 0;
+  setInterval(() => {
+    const nw = img.naturalWidth || 0;
+    if (nw && nw !== lastNW) {
+      lastNW       = nw;
+      lastProgress = Date.now();
+      frameCount  += 1;
+      framesEl.textContent = frameCount.toLocaleString() + " frames";
+    }
+    if (conn.dataset.state === "ok" &&
+        Date.now() - lastProgress > STALL_TIMEOUT_MS) {
+      setState("wait", "stalled · reconnecting");
+      connect();
+    }
+  }, 500);
+
+  // ─── Uptime clock ─────────────────────────────────────────────────────
+  setInterval(() => {
+    const s  = Math.floor((Date.now() - pageStart) / 1000);
+    const hh = String(Math.floor(s / 3600)).padStart(2, "0");
+    const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+    const ss = String(s % 60).padStart(2, "0");
+    uptimeEl.textContent = hh + ":" + mm + ":" + ss;
+  }, 1000);
+
+  // ─── Controls ─────────────────────────────────────────────────────────
+  btnReload.addEventListener("click", connect);
+  btnFs.addEventListener("click", () => {
+    if (!document.fullscreenElement) frameRoot.requestFullscreen?.();
+    else                              document.exitFullscreen?.();
+  });
+
+  // F5 / Ctrl+R rebinds to soft reconnect (avoids losing the page state)
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "F5" || (e.ctrlKey && e.key.toLowerCase() === "r")) {
+      e.preventDefault();
+      connect();
+    }
+  });
+
+  // Boot
+  connect();
+</script>
+
+</body>
+</html>

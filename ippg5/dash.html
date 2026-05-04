@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>rPPG Web Monitor</title>
+
+<style>
+body {
+  background: #0e0e11;
+  color: #eee;
+  font-family: Arial;
+  text-align: center;
+}
+
+video {
+  margin-top: 20px;
+  width: 640px;
+  border-radius: 12px;
+}
+
+#hr {
+  font-size: 2.5rem;
+  margin-top: 20px;
+  color: #60e860;
+}
+
+#status {
+  color: #aaa;
+  margin-top: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>rPPG Browser Interface</h1>
+
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas" style="display:none;"></canvas>
+
+<div id="hr">HR: --</div>
+<div id="status">Initializing...</div>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+let ready = false;
+
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 480 }
+    });
+
+    video.srcObject = stream;
+
+    video.onloadedmetadata = () => {
+      ready = true;
+      document.getElementById("status").innerText = "Camera ready";
+    };
+
+  } catch (err) {
+    document.getElementById("status").innerText = "Camera denied!";
+    console.error(err);
+  }
+}
+
+async function sendFrame() {
+  if (!ready) return;
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  ctx.drawImage(video, 0, 0);
+
+  const blob = await new Promise(resolve =>
+    canvas.toBlob(resolve, "image/jpeg", 0.7)
+  );
+
+  const formData = new FormData();
+  formData.append("frame", blob);
+
+  try {
+    const res = await fetch("http://localhost:5050/process_frame", {
+      method: "POST",
+      body: formData
+    });
+
+    const data = await res.json();
+
+    document.getElementById("hr").innerText =
+      "HR: " + (data.hr ? data.hr.toFixed(1) : "--");
+
+    document.getElementById("status").innerText = "Running";
+
+  } catch (err) {
+    document.getElementById("status").innerText = "Connection error";
+    console.error(err);
+  }
+}
+
+// Start
+startCamera();
+
+// ~10 FPS
+setInterval(sendFrame, 100);
+
+</script>
+
+</body>
+</html>
