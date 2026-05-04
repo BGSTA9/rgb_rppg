@@ -13,7 +13,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S",
 )
-log = logging.getLogger("rppg_monitor")
+log = logging.getLogger("ippg_monitor")
 
 
 # ─── Configuration ────────────────────────────────────────────────────────────
@@ -23,7 +23,7 @@ class Config:
     hr_poll_interval: float = 1.0          # seconds between HR requests
     hr_history_window: int = 10            # samples kept for rolling average
     hr_lookback_seconds: int = -10         # rPPG model lookback
-    window_title: str = "rPPG Monitor"
+    window_title: str = "iPPG Monitor"
     quit_key: str = "q"
 
     # HR zone thresholds (BPM)
@@ -141,7 +141,7 @@ def main() -> None:
 
     fps_times: deque[float] = deque(maxlen=30)
 
-    log.info("Starting rPPG monitor — press '%s' to quit.", CFG.quit_key)
+    log.info("Starting iPPG monitor — press '%s' to quit.", CFG.quit_key)
 
     try:
         with model.video_capture(CFG.camera_index):
@@ -183,7 +183,6 @@ def main() -> None:
     finally:
         cv2.destroyAllWindows()
         log.info("Done.")
-
 
 if __name__ == "__main__":
     main()
